@@ -1,0 +1,93 @@
+[
+  {
+    "name": "deploy-mcv",
+    "priority": 1000,
+    "category": "setup",
+    "exclusive": true,
+    "condition": "HasUnit(\"mcv\") \u0026\u0026 !HasBuilding(\"fact\")"
+  },
+  {
+    "name": "place-ready-building",
+    "priority": 900,
+    "category": "economy",
+    "exclusive": true,
+    "condition": "QueueReady(\"Building\")"
+  },
+  {
+    "name": "build-power",
+    "priority": 800,
+    "category": "economy",
+    "exclusive": true,
+    "condition": "!QueueBusy(\"Building\") \u0026\u0026 CanBuild(\"Building\",\"powr\") \u0026\u0026 (PowerExcess() \u003c 100 || BuildingCount(\"powr\") == 0) \u0026\u0026 Cash() \u003e= 300"
+  },
+  {
+    "name": "build-refinery",
+    "priority": 750,
+    "category": "economy",
+    "exclusive": true,
+    "condition": "!QueueBusy(\"Building\") \u0026\u0026 CanBuild(\"Building\",\"proc\") \u0026\u0026 !HasBuilding(\"proc\") \u0026\u0026 Cash() \u003e= 2000"
+  },
+  {
+    "name": "build-barracks",
+    "priority": 700,
+    "category": "economy",
+    "exclusive": true,
+    "condition": "!QueueBusy(\"Building\") \u0026\u0026 CanBuildRole(\"barracks\") \u0026\u0026 !HasRole(\"barracks\") \u0026\u0026 PowerExcess() \u003e= 0 \u0026\u0026 Cash() \u003e= 300"
+  },
+  {
+    "name": "build-war-factory",
+    "priority": 650,
+    "category": "economy",
+    "exclusive": true,
+    "condition": "!QueueBusy(\"Building\") \u0026\u0026 CanBuild(\"Building\",\"weap\") \u0026\u0026 !HasBuilding(\"weap\") \u0026\u0026 PowerExcess() \u003e= 0 \u0026\u0026 Cash() \u003e= 2000"
+  },
+  {
+    "name": "produce-infantry",
+    "priority": 500,
+    "category": "production",
+    "exclusive": false,
+    "condition": "HasRole(\"barracks\") \u0026\u0026 !QueueBusy(\"Infantry\") \u0026\u0026 UnitCount(\"e1\") \u003c 10 \u0026\u0026 Cash() \u003e= 100"
+  },
+  {
+    "name": "defend-base",
+    "priority": 400,
+    "category": "combat",
+    "exclusive": false,
+    "condition": "BaseUnderAttack() \u0026\u0026 len(IdleGroundUnits()) \u003e= 2"
+  },
+  {
+    "name": "scout-with-idle-units",
+    "priority": 350,
+    "category": "recon",
+    "exclusive": false,
+    "condition": "!EnemiesVisible() \u0026\u0026 !HasEnemyIntel() \u0026\u0026 len(IdleGroundUnits()) \u003e= 5"
+  },
+  {
+    "name": "attack-idle-units",
+    "priority": 300,
+    "category": "combat",
+    "exclusive": false,
+    "condition": "len(IdleGroundUnits()) \u003e= 5 \u0026\u0026 NearestEnemy() != nil"
+  },
+  {
+    "name": "attack-known-base",
+    "priority": 290,
+    "category": "combat",
+    "exclusive": false,
+    "condition": "!EnemiesVisible() \u0026\u0026 HasEnemyIntel() \u0026\u0026 len(IdleGroundUnits()) \u003e= 5"
+  },
+  {
+    "name": "repair-buildings",
+    "priority": 200,
+    "category": "maintenance",
+    "exclusive": false,
+    "condition": "len(DamagedBuildings()) \u003e 0"
+  },
+  {
+    "name": "return-idle-harvesters",
+    "priority": 100,
+    "category": "harvester",
+    "exclusive": false,
+    "condition": "len(IdleHarvesters()) \u003e 0"
+  }
+]
