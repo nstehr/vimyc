@@ -9,3 +9,8 @@
 //!
 //! There is no comment syntax to lex. `because "..."` is a field on a rule and
 //! carries what `//` otherwise would.
+use crate::diag::Diagnostic;
+use crate::parser::Token;
+pub fn lex(source: &str) -> (Vec<Token>, Vec<Diagnostic>) {
+    todo!()
+}
