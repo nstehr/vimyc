@@ -1,6 +1,6 @@
 //! CLI. See `docs/implementation.md` for the intended subcommands.
 use std::env;
-use vimyc::diag::SourceFile;
+use vimyc::{diag::SourceFile, lexer::lex};
 
 fn main() {
     if let Err(e) = run() {
@@ -16,6 +16,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
     let src = SourceFile::new(path, text);
-
+    lex(src.text());
     Ok(())
 }

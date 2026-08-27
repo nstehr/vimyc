@@ -25,6 +25,12 @@ pub struct SourceFile {
     line_starts: Vec<u32>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct LineColumn {
+    pub line: u32,
+    pub col: u32,
+}
+
 impl Span {
     pub fn to(self, other: Span) -> Span {
         Span {
@@ -46,6 +52,30 @@ impl SourceFile {
 
     pub fn text(&self) -> &str {
         &self.text
+    }
+
+    pub fn line_column(&self, offset: u32) -> LineColumn {
+        let line = self.line_starts.partition_point(|&s| s <= offset) - 1;
+        let ls = self.line_starts[line] as usize;
+        let col = self.text[ls..offset as usize].chars().count();
+
+        LineColumn {
+            line: line as u32 + 1,
+            col: col as u32 + 1,
+        }
+    }
+
+    pub fn line_text(&self, line: u32) -> &str {
+        let i = (line - 1) as usize;
+        let start = self.line_starts[i] as usize;
+        let end = if i + 1 < self.line_starts.len() {
+            self.line_starts[i + 1] as usize
+        } else {
+            self.text.len()
+        };
+        self.text[start..end]
+            .trim_end_matches('\n')
+            .trim_end_matches('\r')
     }
 
     fn compute_line_starts(text: &str) -> Vec<u32> {
@@ -86,6 +116,76 @@ mod tests {
     #[test]
     fn trailing_newline_opens_an_empty_last_line() {
         assert_eq!(starts("ab\n"), vec![0, 3]);
+    }
+
+    // ---- line_column ----
+
+    /// Line 1 is 18 bytes, line 2 holds a three-byte em-dash, so line starts
+    /// land at 0, 19, 33 and 48.
+    fn sample() -> SourceFile {
+        SourceFile::new(
+            "sample.vy".into(),
+            "rule build-power {\n  // \u{2014} here\n  require cash\n}".into(),
+        )
+    }
+
+    fn at(src: &SourceFile, offset: u32) -> (u32, u32) {
+        let lc = src.line_column(offset);
+        (lc.line, lc.col)
+    }
+
+    #[test]
+    fn first_byte_is_line_one_column_one() {
+        // Also the `- 1` boundary: partition_point returns 1 here, never 0.
+        assert_eq!(at(&sample(), 0), (1, 1));
+    }
+
+    #[test]
+    fn offset_exactly_on_a_line_start() {
+        assert_eq!(at(&sample(), 19), (2, 1));
+    }
+
+    #[test]
+    fn column_counts_characters_not_bytes() {
+        // Byte subtraction would say column 9; the em-dash is 3 bytes, 1 char.
+        assert_eq!(at(&sample(), 27), (2, 7));
+    }
+
+    #[test]
+    fn last_line_without_trailing_newline() {
+        assert_eq!(at(&sample(), 48), (4, 1));
+    }
+
+    #[test]
+    fn offset_at_end_of_file_does_not_panic() {
+        // An "unexpected end of file" diagnostic carries exactly this span.
+        let src = sample();
+        let eof = src.text().len() as u32;
+        assert_eq!(at(&src, eof), (4, 2));
+    }
+
+    #[test]
+    fn empty_source_at_offset_zero() {
+        let src = SourceFile::new("empty.vy".into(), String::new());
+        assert_eq!(at(&src, 0), (1, 1));
+    }
+
+    // ---- line_text ----
+
+    #[test]
+    fn line_text_returns_the_line() {
+        assert_eq!(sample().line_text(1), "rule build-power {");
+    }
+
+    #[test]
+    fn line_text_excludes_the_trailing_newline() {
+        // A rendered caret block gets a stray blank line otherwise.
+        assert_eq!(sample().line_text(3), "  require cash");
+    }
+
+    #[test]
+    fn line_text_handles_the_last_line() {
+        assert_eq!(sample().line_text(4), "}");
     }
 
     #[test]
