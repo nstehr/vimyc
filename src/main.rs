@@ -16,6 +16,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
     let src = SourceFile::new(path, text);
-    lex(src.text());
-    Ok(())
+    let (tokens, diags) = lex(src.text());
+
+    for d in &diags {
+        let lc = src.line_column(d.span.start);
+        eprintln!("{}:{}:{}: {}", src.name, lc.line, lc.col, d.message);
+    }
+
+    for t in &tokens {
+        let lc = src.line_column(t.span.start);
+        println!("{:>3}:{:<3} {:?}", lc.line, lc.col, t.kind);
+    }
+
+    if diags.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("{} lexing error(s)", diags.len()).into())
+    }
 }
