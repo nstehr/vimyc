@@ -15,14 +15,73 @@ pub struct Token {
     pub span: Span,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+/// Note the absence of `Eq`: `Float` holds an `f64`, and `NaN != NaN` means
+/// floats are only `PartialEq`. `==` still works, which is all the parser needs;
+/// what is lost is using a `TokenKind` as a `HashMap` key.
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
+    // literals and names
     Identifier(String),
     Number(i64),
+    Float(f64),
+    /// Contents only — the surrounding quotes are not kept.
+    Str(String),
+
+    // keywords
+    Rule,
+    Priority,
+    Category,
+    Exclusive,
+    Do,
+    Require,
+    Because,
+    Let,
+    And,
+    Or,
+    Not,
+    Exists,
+
+    // punctuation
+    LParen,
+    RParen,
+    LBrace,
+    RBrace,
+    Comma,
+
+    // arithmetic
     Plus,
     Minus,
     Asterisk,
     Slash,
-    LParen,
-    RParen,
+
+    // comparison
+    EqEq,
+    NotEq,
+    Lt,
+    LtEq,
+    Gt,
+    GtEq,
+
+    Eof,
+}
+
+impl TokenKind {
+    /// Maps an already-scanned identifier to its keyword kind, if it is one.
+    pub fn keyword(s: &str) -> Option<TokenKind> {
+        Some(match s {
+            "rule" => TokenKind::Rule,
+            "priority" => TokenKind::Priority,
+            "category" => TokenKind::Category,
+            "exclusive" => TokenKind::Exclusive,
+            "do" => TokenKind::Do,
+            "require" => TokenKind::Require,
+            "because" => TokenKind::Because,
+            "let" => TokenKind::Let,
+            "and" => TokenKind::And,
+            "or" => TokenKind::Or,
+            "not" => TokenKind::Not,
+            "exists" => TokenKind::Exists,
+            _ => return None,
+        })
+    }
 }
