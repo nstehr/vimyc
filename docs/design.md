@@ -1,8 +1,7 @@
 # Language design
 
-Decisions and the reasoning behind them. Everything here was settled by
-translating the 13 seed rules by hand — see [corpus.md](corpus.md) for the
-numbers that back it up.
+Decisions and why. I settled all of this by translating the 13 seed rules by
+hand — see [corpus.md](corpus.md) for the numbers behind it.
 
 ## A rule
 
@@ -19,7 +18,7 @@ rule build-power {
 }
 ```
 
-From the expr it replaces:
+Replacing this expr:
 
 ```
 !QueueBusy("Building") && CanBuild("Building","powr")
@@ -28,17 +27,16 @@ From the expr it replaces:
 
 ## `require` instead of one big expression
 
-All 13 seed rules are a flat AND of independent tests, with ORs only ever nested
-inside parens. That is what production rules look like, so conjunction is
+All 13 seed rules are a flat AND of independent tests, with ORs only nested
+inside parens. That's what production rules look like, so conjunction should be
 structural rather than an operator you happen to use a lot.
 
-Each `require` is a conjunct. That buys three things: conjunct identity is free
-and stable (useful for any later "why didn't this rule fire" analysis), adding a
-condition is a one-line diff, and there is no question about where the `and`
-goes when a line wraps.
+Each `require` is one conjunct. Conjunct identity comes for free and stays stable
+(useful for a later "why didn't this rule fire"), adding a condition is a one-line
+diff, and there's no question about where the `and` goes when a line wraps.
 
-The cost is that a genuinely top-level OR needs `require any(...)`. Given 13 out
-of 13, that trade is fine.
+The cost is that a real top-level OR needs `require any(...)`. Given 13 out of 13,
+I'll take it.
 
 ## Rule fields
 
@@ -52,14 +50,14 @@ requires  Vec<Expr>  implicitly ANDed, one per line, no shorthand
 lets      Vec<Let>   rule-scoped bindings
 ```
 
-`exclusive` reads as a modifier — `category combat exclusive` — rather than as a
-field. Eight of the thirteen seed rules are non-exclusive, so the common case
+`exclusive` reads as a modifier (`category combat exclusive`) rather than a
+field. Eight of the thirteen seed rules aren't exclusive, so the common case
 stays quiet.
 
-Rule names and action names are separate namespaces and do collide in practice:
+Rule names and action names are separate namespaces and they do collide:
 `deploy-mcv`, `produce-infantry`, `defend-base` and `repair-buildings` are each
-both a rule and an action. `do` takes an action so resolution is unambiguous, but
-the resolver needs two tables, not one.
+both a rule and an action. `do` takes an action, so resolution is unambiguous,
+but the resolver needs two tables.
 
 ## Names
 
@@ -78,52 +76,62 @@ size-1                    subtraction (digit follows)
 size-one                  one identifier   <- the confusable case
 ```
 
-That last line is the footgun. It is survivable only because the type checker
-knows every valid identifier: `size-one` is not a binding, a predicate or an enum
-member, so it is a hard error with a span rather than silently wrong arithmetic.
-Worth a special-cased diagnostic suggesting `size - one`.
+That last line is the footgun. It survives because the type checker knows every
+valid identifier: `size-one` isn't a binding, a predicate or an enum member, so
+it's a hard error with a span rather than silently wrong arithmetic. Worth a
+special-cased diagnostic suggesting `size - one`.
 
-In practice arithmetic in these rules is rare and always spaced, and the
-formatter enforces spacing around binary operators, so the case barely arises.
+In practice arithmetic here is rare and always spaced, and the formatter enforces
+spacing around binary operators. Of the 1,932 condition forms `CompileDoctrine`
+emits, nine contain arithmetic and subtraction appears exactly once, as
+`AircraftCapacity() - 1` — a call minus a literal, not confusable even unspaced
+since `)` isn't an identifier character. Zero instances of
+identifier-minus-identifier.
 
-Rule names alone would not need this — they appear only after `rule`, where
-nothing else is legal, so a contextual lexer mode would do. The general rule
-exists so squad names and categories, which appear in expression positions, can
-look the same.
+So this is a forward-looking risk. It arrives with `let`, which expr has no
+equivalent of, and which is the first construct that can put two bare identifiers
+either side of a `-`.
+
+I considered a stricter rule — drop the "followed by a letter" clause so
+whitespace alone decides, making `size-1` an unknown identifier. Symmetric and
+easier to explain, but it buys nothing the formatter and type checker don't
+already cover.
+
+Rule names alone wouldn't need any of this; they only appear after `rule`, where
+nothing else is legal. The general rule exists so squad names and categories,
+which show up in expression positions, can look the same.
 
 ### Source spelling is not the wire format
 
 Enum literals are interned, so what you type and what reaches Go are independent.
 The Go side is inconsistent — rule and squad names are kebab (`build-power`,
 `ground-defense`), categories are snake (`squad_form`, `air_combat`) — and those
-strings are keys in `rule_firings.rule_name` and `rule_set_json`, so changing
-them orphans the existing tuning history.
+strings are keys in `rule_firings.rule_name` and `rule_set_json`. Changing them
+orphans the existing tuning history.
 
-Keep the source uniformly kebab and hold one mapping table on emit. The
-compatibility constraint is on emission, not on syntax.
+So: source stays uniformly kebab, one mapping table on emit. The compatibility
+constraint is on emission, not on syntax.
 
 ## No comments
 
-There is no comment syntax. `because "..."` is the documentation mechanism, and
-it is a field rather than trivia.
+There's no comment syntax. `because "..."` is the documentation mechanism, and
+it's a field rather than trivia.
 
-A Go comment explaining why a rule exists does not survive into `rule_set_json`,
+A Go comment explaining why a rule exists doesn't survive into `rule_set_json`,
 so the most valuable knowledge in `compiler_*.go` — the game 16 squad-poaching
 fix, the game 64 cash-reservation starvation — is invisible to everything
 downstream of the compiler. A field survives: into the archive, into a diff, into
 whatever reads a rule set back later.
 
-Consequence: the AST carries everything the source carries, so the formatter is a
-plain pretty-printer with no trivia machinery.
-
-Obligation: `because` has to actually carry that weight. Still open whether it
-should be required, or whether a lint should flag a rule with a threshold nobody
-explained.
+Two consequences. The AST carries everything the source carries, so the formatter
+is a plain pretty-printer with no trivia machinery. And `because` has to actually
+carry that weight — still open whether it should be required, or whether a lint
+should flag a rule with a threshold nobody explained.
 
 ## Predicates
 
 A fraction of Go's `RuleEnv`, which has 108 methods. Many are action-only and
-unusable in a condition — `ApproachWaypoint` returns `(int, int, bool)`. Choosing
+unusable in a condition — `ApproachWaypoint` returns `(int, int, bool)`. Picking
 the subset is design work, not transcription.
 
 ### v0 surface
@@ -161,7 +169,7 @@ type, which also keeps a future wasm ABI to integers only.
 ### Pointers become options
 
 `NearestEnemy() != nil` is the only shape pointer returns take. An option type
-that cannot be used where a bool is expected is stricter than what expr allows.
+that can't be used where a bool is expected is stricter than what expr allows.
 
 ### `count` is generic
 
@@ -174,30 +182,30 @@ count(idle-ground-units)   collection   -> len(IdleGroundUnits())
 ```
 
 All three answer "how many of this do I have", so one name is honest rather than
-merely shorter.
+just shorter.
 
-The cost: completion inside `count(` cannot be scoped the way `has-role(` can. It
+The cost: completion inside `count(` can't be scoped the way `has-role(` can. It
 has to offer buildings, units and collections together, and an unknown-identifier
 suggestion searches all three.
 
 ### Why `SquadReadyRatio` is in v0
 
-The 13 seed rules contain no float literals and call nothing returning a float, so
-a v0 built strictly to them would never exercise the `f64` path — not in the type
-checker, not in the interpreter, not across a wasm host boundary. The squad rules
-`CompileDoctrine` emits lean on it heavily (`SquadReadyRatio("ground-attack") >=
-0.7`), so the gap would surface immediately on widening, after the vertical had
-already been declared working.
+The 13 seed rules contain no float literals and call nothing returning a float,
+so a v0 built strictly to them would never exercise the `f64` path — not in the
+type checker, not in the interpreter, not across a wasm host boundary. The squad
+rules `CompileDoctrine` emits lean on it heavily
+(`SquadReadyRatio("ground-attack") >= 0.7`), so the gap would surface the moment I
+widened, after the vertical had already been called working.
 
 Semantics, from `env.go:1340`: idle members over available members, where
 available excludes units currently retreating. Returns exactly `0.0` for an
 unknown squad, an empty squad, or one whose members are all retreating — so a
-caller cannot distinguish "no squad" from "squad ready 0%". Preserve that rather
-than improving it. Matching expr is the point, and the differential test will hold
-you to it.
+caller can't distinguish "no squad" from "squad ready 0%". Preserve that rather
+than improving it. Matching expr is the point, and the differential test will
+hold me to it.
 
 It also reads `Memory`, which the engine mutates between rules as actions fire.
-Nothing in the seed set does that, so it is the first predicate that would force a
+Nothing in the seed set does that, so it's the first predicate that would force a
 shadow harness to interleave with the Go loop rather than run as a separate pass.
 
 ### The enums
@@ -207,7 +215,7 @@ full corpus. Interning them is what turns `has-role("war_facotry")` from a silen
 no-op into a compile error — the single highest-value thing in the project.
 
 Queue literals are capitalised (`Building`, `Infantry`) and everything else is
-lowercase kebab. That is an inconsistency, kept because it makes
+lowercase kebab. An inconsistency I kept, because it makes
 `can-build(Building, powr)` visibly two different domains.
 
 ## Types
@@ -215,34 +223,56 @@ lowercase kebab. That is an inconsistency, kept because it makes
 Small: `Int`, `Float`, `Bool`, the domain enums, and `Option<T>`. What matters is
 what becomes an error that expr accepts today:
 
-- an enum literal that is not a member (`has-role(war-facotry)`)
+- an enum literal that isn't a member (`has-role(war-facotry)`)
 - an enum of the wrong domain (a UnitType where a Role belongs)
 - an option used as a bool
 - comparing values of different types
 - arity or argument-type mismatch on a predicate
 - an ambiguous `count(...)` argument
 
+### Classifying identifiers
+
+Only keywords and definition names are positional. Everything else is a bare
+identifier the type checker sorts out:
+
+| class | example | resolved by |
+|---|---|---|
+| keyword | `rule`, `require`, `and` | lexer, via `TokenKind::keyword` |
+| predicate | `queue-busy`, `cash`, `count` | type checker, against the env table |
+| enum literal | `Building`, `powr`, `barracks` | type checker, by argument position |
+| binding | `size`, `surplus` | type checker, rule scope |
+| definition name | `build-power`, `economy`, `produce-power-plant` | parser, by position |
+
+Predicates are deliberately **not** lexed as their own token kind. Keywords are
+grammar — they change how the parser reads what follows. Predicates are data. As
+tokens, adding a predicate would mean editing the lexer, and a typo'd predicate
+would be a syntax error rather than a type error with a suggestion, which is the
+whole point of the language.
+
+**Bindings may not shadow predicates.** `let cash = 5` is an error. A rule where
+`cash` means something other than cash is exactly the confusion this language
+exists to prevent, and rejecting it costs one lookup.
+
 ### Resolving `count`
 
 Look the identifier up across BuildingType, UnitType and the collections. Exactly
 one hit resolves the call. Zero hits is an unknown-identifier error whose
 suggestions span all three. **Two or more hits is an ambiguity error, never a
-silent pick** — the whole point of the language is that a name meaning something
-unintended gets caught rather than shipped.
+silent pick.**
 
-No collision exists today (`fact`/`powr`/`proc`/`weap` versus `e1`/`mcv`), so that
-path will be untested unless a fixture forces it. Write the fixture.
+No collision exists today (`fact`/`powr`/`proc`/`weap` versus `e1`/`mcv`), so
+that path stays untested unless a fixture forces it. Write the fixture.
 
 ### Later: whole-rule-set checks
 
-These need the full set rather than one condition, and they are the checks Go
-structurally cannot do:
+These need the full set rather than one condition, and they're the checks Go
+structurally can't do:
 
 - `squad-exists(X)` with no reachable `form-squad(X, ...)` — currently held
   together only by the two rules being adjacent in one `if` block
 - a rule shadowed by a higher-priority exclusive rule in the same category
 - priority collisions within a category (ordering is nondeterministic today)
-- guards on if/else rule pairs that do not partition (`defend-base` versus
+- guards on if/else rule pairs that don't partition (`defend-base` versus
   `form-defense-squad` + `squad-defend-base`)
 
 ## Formatting
@@ -265,17 +295,17 @@ rules; mandatory spacing around binary operators.
 
 Field values are column-aligned. The field keywords are a closed set that all fit
 in eight columns (`priority`, `category`, `do`, `because`), so alignment is
-stable — a user cannot trigger a reflow without a grammar change. `require` and
-`let` are statements and stay outside the alignment group.
+stable — you can't trigger a reflow without a grammar change. `require` and `let`
+are statements and stay outside the alignment group.
 
-Beyond looking tidy, the formatter closes the kebab footgun by enforcing spacing
-around binary operators, and it is what would make rule-set content hashing
-stable if that is ever wanted for comparing strategies across games.
+Past looking tidy, the formatter closes the kebab footgun by enforcing spacing
+around binary operators, and it's what would make rule-set content hashing stable
+if I ever want that for comparing strategies across games.
 
 ### v0 needs no line breaking
 
 37 conjuncts across the seed rules: shortest 13 characters, median 20, longest 51.
-None exceed 60. One `require` per line, never wrap.
+None over 60. One `require` per line, never wrap.
 
 The doctrine-compiled rules reach 575 characters, so breaking arrives eventually.
 Reach for the Wadler/Lindig document algebra then, not before.
@@ -284,5 +314,5 @@ Reach for the Wadler/Lindig document algebra then, not before.
 
 `reserve` declarations, doctrine parameter declarations, rule-level guards
 (`rule x when tech-priority > 0.4`), `any(...)`, wasm codegen, actions with
-arguments, LLM authoring. All known-needed later, none needed to take 13 rules
-through to a working interpreter.
+arguments, LLM authoring. All needed later, none needed to take 13 rules through
+to a working interpreter.

@@ -1,12 +1,12 @@
 //! Tokens to tree. Hand-written recursive descent.
 //!
-//! Returns `(Ast, Vec<Diagnostic>)`, not `Result`. On failure, record the
-//! diagnostic, skip to the next token that can start a construct, and carry on;
-//! `ExprKind::Error` stands in for whatever failed to parse.
+//! Collects errors rather than bailing, so one bad construct does not hide the
+//! rest of the file. `ExprKind::Error` stands in for whatever failed to parse,
+//! and later stages skip those nodes instead of cascading off them.
 //!
-//! Reasoning and the precedence table are in `docs/implementation.md`.
+//! Reasoning is in `docs/implementation.md`.
 
-use crate::ast::{Ast, Expr, Let, Name, Rule};
+use crate::ast::{Ast, BinOp, Expr, ExprKind, Let, Name, Rule, UnOp};
 use crate::diag::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
 
@@ -16,8 +16,7 @@ pub fn parse(tokens: &[Token]) -> (Ast, Vec<Diagnostic>) {
     (ast, parser.diags)
 }
 
-/// Borrows the token slice: a `Parser` lives only for one `parse` call, so the
-/// lifetime never escapes. Same reasoning as `Lexer`.
+/// Borrows the token slice: a `Parser` lives only for one `parse` call.
 struct Parser<'a> {
     tokens: &'a [Token],
     /// Index of the next unconsumed token.
@@ -34,7 +33,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// `rule*` until `Eof`.
     fn parse(&mut self) -> Ast {
         let mut rules = Vec::new();
         while !self.at_end() {
@@ -55,9 +53,6 @@ impl<'a> Parser<'a> {
 
         let name = self.name()?;
 
-        // A fresh span per check: `start` is where the rule began, not where
-        // this token is, and a diagnostic has to point at what was actually
-        // found.
         let brace = self.peek_span();
         if !self.eat(&TokenKind::LBrace) {
             self.error(brace, "expected `{` after the rule name".into());
@@ -72,8 +67,7 @@ impl<'a> Parser<'a> {
         let mut lets: Vec<Let> = Vec::new();
         let mut requires: Vec<Expr> = Vec::new();
 
-        // `at_end` guards against a missing `}` running off the end. Every arm
-        // must consume at least one token, or this loop spins.
+        // Every arm must consume at least one token, or this loop spins.
         while !self.at(&TokenKind::RBrace) && !self.at_end() {
             match self.peek() {
                 TokenKind::Priority => {
@@ -117,12 +111,27 @@ impl<'a> Parser<'a> {
                         because = Some(text);
                     }
                 }
-                TokenKind::Let => todo!("let NAME = expr"),
-                TokenKind::Require => todo!("require expr"),
+                TokenKind::Let => {
+                    let kw = self.peek_span();
+                    self.bump(); // `let`
+                    if let Some(name) = self.name() {
+                        self.expect(&TokenKind::Eq);
+                        let value = self.expr();
+                        lets.push(Let {
+                            span: kw.to(value.span),
+                            name,
+                            value,
+                        });
+                    }
+                }
+                TokenKind::Require => {
+                    self.bump(); // `require`
+                    requires.push(self.expr());
+                }
                 _ => {
                     let span = self.peek_span();
                     self.error(span, "expected a rule field or `require`".into());
-                    self.bump(); // progress: never leave this arm without consuming
+                    self.bump(); // progress
                 }
             }
         }
@@ -133,8 +142,7 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        // Missing fields are diagnostics rather than panics — a rule without a
-        // priority is bad input, not a compiler bug.
+        // Bad input, not a compiler bug, so these report rather than panic.
         let priority = match priority {
             Some(p) => p,
             None => {
@@ -184,13 +192,182 @@ impl<'a> Parser<'a> {
     //   primary: literal, name, call, ( ... )
 
     fn expr(&mut self) -> Expr {
-        todo!("start at the loosest level")
+        self.or_expr()
+    }
+
+    fn or_expr(&mut self) -> Expr {
+        let mut left = self.and_expr();
+        while self.eat(&TokenKind::Or) {
+            let right = self.and_expr();
+            left = binary(BinOp::Or, left, right);
+        }
+        left
+    }
+
+    fn and_expr(&mut self) -> Expr {
+        let mut left = self.cmp_expr();
+        while self.eat(&TokenKind::And) {
+            let right = self.cmp_expr();
+            left = binary(BinOp::And, left, right);
+        }
+        left
+    }
+
+    fn cmp_expr(&mut self) -> Expr {
+        let mut left = self.add_expr();
+        loop {
+            let op = match self.peek() {
+                TokenKind::EqEq => BinOp::Eq,
+                TokenKind::NotEq => BinOp::NotEq,
+                TokenKind::Lt => BinOp::Lt,
+                TokenKind::LtEq => BinOp::LtEq,
+                TokenKind::Gt => BinOp::Gt,
+                TokenKind::GtEq => BinOp::GtEq,
+                _ => break,
+            };
+            self.bump();
+            let right = self.add_expr();
+            left = binary(op, left, right);
+        }
+        left
+    }
+
+    fn add_expr(&mut self) -> Expr {
+        let mut left = self.mul_expr();
+        loop {
+            let op = match self.peek() {
+                TokenKind::Plus => BinOp::Add,
+                TokenKind::Minus => BinOp::Sub,
+                _ => break,
+            };
+            self.bump();
+            let right = self.mul_expr();
+            left = binary(op, left, right);
+        }
+        left
+    }
+
+    fn mul_expr(&mut self) -> Expr {
+        let mut left = self.unary();
+        loop {
+            let op = match self.peek() {
+                TokenKind::Asterisk => BinOp::Mul,
+                TokenKind::Slash => BinOp::Div,
+                _ => break,
+            };
+            self.bump();
+            let right = self.unary();
+            left = binary(op, left, right);
+        }
+        left
+    }
+
+    /// Right-recursive so `not not x` nests — prefix operators have nothing to
+    /// be left-associative about.
+    fn unary(&mut self) -> Expr {
+        let start = self.peek_span();
+        let op = match self.peek() {
+            TokenKind::Not => UnOp::Not,
+            TokenKind::Minus => UnOp::Neg,
+            TokenKind::Exists => UnOp::Exists,
+            _ => return self.primary(),
+        };
+        self.bump();
+        let operand = self.unary();
+        Expr {
+            span: start.to(operand.span),
+            kind: ExprKind::Unary(op, Box::new(operand)),
+        }
+    }
+
+    /// Where the ladder bottoms out. A parenthesised expression restarts it from
+    /// the loosest level, which is why parentheses override precedence.
+    fn primary(&mut self) -> Expr {
+        let span = self.peek_span();
+        match *self.peek() {
+            TokenKind::Number(n) => {
+                self.bump();
+                Expr {
+                    kind: ExprKind::Int(n),
+                    span,
+                }
+            }
+            TokenKind::Float(f) => {
+                self.bump();
+                Expr {
+                    kind: ExprKind::Float(f),
+                    span,
+                }
+            }
+            TokenKind::LParen => {
+                self.bump();
+                let inner = self.expr();
+                let close = self.peek_span();
+                if !self.eat(&TokenKind::RParen) {
+                    self.error(close, "expected `)`".into());
+                    return error_expr(span.to(close));
+                }
+                Expr {
+                    kind: inner.kind,
+                    span: span.to(close),
+                }
+            }
+            TokenKind::Identifier(_) => self.name_or_call(),
+            _ => {
+                self.error(span, "expected an expression".into());
+                self.bump(); // progress, so a bad token cannot stall a loop
+                error_expr(span)
+            }
+        }
+    }
+
+    /// A bare name, or a call if a `(` follows. Kept distinct in the tree — see
+    /// `docs/implementation.md`.
+    fn name_or_call(&mut self) -> Expr {
+        let Some(name) = self.name() else {
+            let span = self.peek_span();
+            return error_expr(span);
+        };
+
+        if !self.at(&TokenKind::LParen) {
+            return Expr {
+                span: name.span,
+                kind: ExprKind::Ident(name),
+            };
+        }
+
+        self.bump(); // `(`
+        let mut args = Vec::new();
+        if !self.at(&TokenKind::RParen) {
+            loop {
+                args.push(self.expr());
+                if !self.eat(&TokenKind::Comma) {
+                    break;
+                }
+                // A trailing comma ends the list rather than demanding another.
+                if self.at(&TokenKind::RParen) || self.at_end() {
+                    break;
+                }
+            }
+        }
+
+        let close = self.peek_span();
+        let start = name.span;
+        if !self.eat(&TokenKind::RParen) {
+            self.error(close, "expected `)` to close the argument list".into());
+            return error_expr(start.to(close));
+        }
+
+        Expr {
+            span: start.to(close),
+            kind: ExprKind::Call(name, args),
+        }
     }
 
     // ---- cursor ----
 
-    /// The next token's kind. Never `None`: the stream always ends with `Eof`,
-    /// and `pos` never advances past it.
+    /// Cannot go out of bounds: the stream ends with `Eof` and `bump` never
+    /// advances past it.
     fn peek(&self) -> &TokenKind {
         &self.tokens[self.pos].kind
     }
@@ -203,12 +380,13 @@ impl<'a> Parser<'a> {
         self.at(&TokenKind::Eof)
     }
 
-    /// The span of the next token — where a diagnostic about it should point.
+    /// Where a diagnostic about the next token should point.
     fn peek_span(&self) -> Span {
         self.tokens[self.pos].span
     }
 
-    /// Consumes the next token and returns it.
+    /// Consumes the next token, clamping at `Eof` so a truncated file cannot
+    /// run the cursor off the end.
     fn bump(&mut self) -> &'a Token {
         let t = &self.tokens[self.pos];
         if !self.at_end() {
@@ -217,7 +395,6 @@ impl<'a> Parser<'a> {
         t
     }
 
-    /// Consumes the next token if it is `kind`, and reports whether it did.
     fn eat(&mut self, kind: &TokenKind) -> bool {
         if self.at(kind) {
             self.bump();
@@ -227,16 +404,16 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Consumes `kind` or reports a diagnostic. Does not skip anything —
-    /// recovery is the caller's decision.
+    /// Reports on a mismatch but skips nothing: recovery is the caller's job.
     fn expect(&mut self, kind: &TokenKind) -> bool {
-        todo!("eat, or self.error(...) describing what was wanted")
+        if self.eat(kind) {
+            return true;
+        }
+        let span = self.peek_span();
+        self.error(span, format!("expected {kind:?}"));
+        false
     }
 
-    /// Consumes an integer literal, or reports and returns `None`.
-    ///
-    /// No clone needed, unlike `string_literal`: `i64` is `Copy`, so it comes
-    /// straight out of the borrowed token.
     fn number(&mut self) -> Option<i64> {
         let span = self.peek_span();
         if let TokenKind::Number(n) = *self.peek() {
@@ -248,17 +425,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Consumes a string literal and returns its contents, or reports and
-    /// returns `None`.
-    ///
-    /// Returns an owned `String` rather than a symbol: `because` text is unique
-    /// prose that is stored and printed, never compared or looked up, so there
-    /// is nothing for interning to save. Names are the opposite — see
-    /// `docs/design.md`.
+    /// Returns an owned `String` rather than an interned symbol: `because` text
+    /// is prose that gets stored and printed, never compared or looked up.
     fn string_literal(&mut self) -> Option<String> {
         let span = self.peek_span();
-        // `Str` owns its contents and the token slice is borrowed, so the text
-        // has to be cloned out rather than moved.
         if let TokenKind::Str(text) = self.peek() {
             let text = text.clone();
             self.bump();
@@ -269,9 +439,16 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Consumes an identifier, or reports and returns `None`.
     fn name(&mut self) -> Option<Name> {
-        todo!("TokenKind::Identifier becomes a Name carrying its span")
+        let span = self.peek_span();
+        if let TokenKind::Identifier(text) = self.peek() {
+            let text = text.clone();
+            self.bump();
+            Some(Name { text, span })
+        } else {
+            self.error(span, "expected a name".into());
+            None
+        }
     }
 
     // ---- errors ----
@@ -280,10 +457,90 @@ impl<'a> Parser<'a> {
         self.diags.push(Diagnostic { message, span });
     }
 
-    /// Panic-mode recovery: skip forward to a token that can legally start a
-    /// construct, so one bad line does not cascade. See
-    /// `docs/implementation.md`, "Error recovery".
+    /// Panic-mode recovery: skip to the next `rule`. Only `parse` calls this,
+    /// and `rule` is the only token that can start a top-level construct. A rule
+    /// body needs a different break set, but its loop handles errors inline and
+    /// never comes through here. See `docs/implementation.md`, "Error recovery".
     fn recover(&mut self) {
-        todo!("skip to Rule / Require / Let / Do / Priority / Category / Because / RBrace / Eof")
+        // Deliberately no unconditional bump first: that would swallow the very
+        // rule this is aiming for. Progress is still guaranteed, because `rule`
+        // returns `None` on a `rule` token only after consuming it.
+        while !self.at_end() && !self.at(&TokenKind::Rule) {
+            self.bump();
+        }
+    }
+}
+
+/// Folds two operands into a binary node spanning both.
+///
+/// A free function, not a method: `&mut self` would clash with operands already
+/// moved out of the parser.
+fn binary(op: BinOp, left: Expr, right: Expr) -> Expr {
+    Expr {
+        // Must precede `kind`, which moves the operands. Struct fields evaluate
+        // top to bottom.
+        span: left.span.to(right.span),
+        kind: ExprKind::Binary(op, Box::new(left), Box::new(right)),
+    }
+}
+
+/// Stands in for an expression that failed to parse, so later stages can skip
+/// the hole rather than cascading fresh errors off it.
+fn error_expr(span: Span) -> Expr {
+    Expr {
+        kind: ExprKind::Error,
+        span,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::lex;
+
+    fn parse_str(src: &str) -> (Ast, Vec<Diagnostic>) {
+        let (toks, lex_diags) = lex(src);
+        assert!(lex_diags.is_empty(), "lexing failed: {lex_diags:?}");
+        parse(&toks)
+    }
+
+    // Both of these hung at one point. They assert little; what they guard
+    // against is the parser looping forever, which no other test would catch.
+
+    #[test]
+    fn junk_at_top_level_terminates() {
+        let (ast, diags) = parse_str("require cash >= 300\n");
+        assert!(!diags.is_empty());
+        assert!(ast.rules.is_empty());
+    }
+
+    #[test]
+    fn stray_brace_terminates() {
+        let (_, diags) = parse_str("}\n");
+        assert!(!diags.is_empty());
+    }
+
+    #[test]
+    fn recovers_to_the_next_rule() {
+        let (ast, diags) = parse_str(
+            "garbage here\nrule build-power {\n  priority 800\n  category economy\n  do produce-power-plant\n  require cash >= 300\n}\n",
+        );
+        assert!(!diags.is_empty(), "the junk should be reported");
+        assert_eq!(ast.rules.len(), 1, "the rule after it should still parse");
+        assert_eq!(ast.rules[0].name.text, "build-power");
+    }
+
+    #[test]
+    fn a_rule_missing_a_field_does_not_eat_the_next_one() {
+        let (ast, diags) = parse_str(
+            "rule broken {\n  category economy\n  do thing\n  require cash >= 300\n}\n\nrule after-it {\n  priority 700\n  category economy\n  do other\n  require cash >= 100\n}\n",
+        );
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(
+            ast.rules.len(),
+            1,
+            "the rule after a broken one must still parse"
+        );
+        assert_eq!(ast.rules[0].name.text, "after-it");
     }
 }

@@ -1,7 +1,6 @@
 # Implementation notes
 
-How the compiler is put together, and the handful of decisions that are
-expensive to reverse.
+How the compiler fits together, and the decisions that are expensive to reverse.
 
 ```
 source ──lexer──> tokens ──parser──> ast ──types──> checked ast ──eval──> bool
@@ -18,20 +17,20 @@ source ──lexer──> tokens ──parser──> ast ──types──> chec
 | `eval` | tree-walking interpreter |
 | `fmt` | canonical formatting |
 
-Everything is hand-written on purpose. The one dependency worth reaching for
-eventually is `miette` or `ariadne` for diagnostic rendering, and only once the
-hand-rolled version gets boring.
+All hand-written on purpose. The one dependency worth reaching for eventually is
+`miette` or `ariadne` for diagnostic rendering, once the hand-rolled version gets
+boring.
 
 ## Order to build in
 
 `Span` → lexer → the rest of `diag` → ast → parser → types → eval.
 
-`diag` splits in two. `Span` itself is about ten lines and the lexer cannot emit
-tokens without it, so that comes first. The rendering half — `SourceFile`,
-`line_col`, `Diagnostic`, the caret block — has no consumer until something
-produces an error, and the lexer is the first producer (unexpected character,
-unterminated string). Writing the renderer against real lexer errors is a much
-tighter loop than eyeballing hand-constructed spans.
+`diag` splits in two. `Span` is about ten lines and the lexer can't emit tokens
+without it, so it comes first. The rendering half — `SourceFile`, `line_col`,
+`Diagnostic`, the caret block — has no consumer until something produces an
+error, and the lexer is the first producer (unexpected character, unterminated
+string). Writing the renderer against real lexer errors is a much tighter loop
+than eyeballing hand-constructed spans.
 
 ## Spans
 
@@ -46,14 +45,12 @@ impl Span {
 }
 ```
 
-Four deliberate choices:
-
 **`Copy`** — spans are read, passed and merged constantly. Two integers; copy
-them rather than fighting the borrow checker over something with no business
-being borrowed.
+them rather than fight the borrow checker over something with no business being
+borrowed.
 
 **`u32`, not `usize`** — eight bytes instead of sixteen, and this rides on every
-AST node. Rule files will not approach 4GB. rustc makes the same call.
+AST node. Rule files won't approach 4GB. rustc makes the same call.
 
 **Byte offsets, not line/column** — line and column are a rendering concern,
 computed from the source you already have. Storing them on every node duplicates
@@ -61,23 +58,39 @@ information and goes stale under any transform. Offsets also merge trivially.
 
 **`to()` is the operation you use most** — a binary expression's span is
 `lhs.span.to(rhs.span)`, a call's runs from the identifier to the closing paren.
-Whole-expression spans fall out of their children; you never compute one by hand.
+Whole-expression spans fall out of their children.
 
-Retrofitting spans is specifically painful in Rust. Adding a field to every AST
-variant means touching every construction site and every match arm; wrapping in
-`Spanned<T>` infects every recursive position so `Box<Expr>` becomes
+Retrofitting spans in Rust is specifically painful. A field on every AST variant
+means touching every construction site and every match arm; wrapping in
+`Spanned<T>` infects every recursive position, so `Box<Expr>` becomes
 `Box<Spanned<Expr>>` and every pattern grows a `.node`. Either way the compiler
-makes you finish the whole refactor before anything builds again.
+makes you finish the whole refactor before anything builds.
 
 ### Rendering
 
-To turn a span into line/column, hold the source alongside a precomputed table of
-line-start offsets and binary-search it. `slice::partition_point` is the idiomatic
-call.
+To turn a span into line/column, `SourceFile` holds the source alongside a
+precomputed table of line-start offsets and binary-searches it with
+`slice::partition_point`.
 
-**Columns must be counted in characters, not bytes**, or the caret drifts the
-moment a `because` string contains an em-dash. `&s[a..b]` panics on a non-char
-boundary, which is the language telling you something true.
+**Count columns in characters, not bytes**, or the caret drifts the moment a
+`because` string contains an em-dash. `&s[a..b]` panics on a non-char boundary,
+which is the language telling you something true.
+
+`.chars().count()` still isn't visual width — a combining accent is two chars and
+one glyph, and CJK characters take two terminal columns. rustc reports char
+columns too, so it's the right pragmatic answer; just expect drift under exotic
+input.
+
+### Line and column conventions
+
+`SourceFile::line_column` returns a `LineColumn { line, col }` rather than a
+`(u32, u32)`, so the two can't be swapped at a call site.
+
+**Both fields are 1-based, and zero-based indices never leave the module.** The
+`line_starts` table is indexed from zero internally, and the single `- 1` / `+ 1`
+happens inside `line_column`. Anything public that takes a line number —
+`line_text` — takes the 1-based one and converts internally. Two conventions
+crossing the same boundary is where off-by-ones breed.
 
 If this ever goes multi-file, `Span` grows a `FileId` and the source map holds
 several files. Not worth designing for now.
@@ -95,10 +108,8 @@ error: unknown role `war-facotry`
 ## AST shape
 
 Conditions are overwhelmingly a top-level conjunction of independent tests, and
-the language makes that structural via `require`. Within a `require`, represent
-`and`/`or` flatly — `And(Vec<Expr>)` rather than nested `BinOp` — for the same
-reason: it matches how the rules are actually written and makes conjunct-level
-analysis easy later.
+the language makes that structural via `require` — one conjunct per line, no
+`and` node needed at the top level at all.
 
 The conventional shape, used by both rustc and rust-analyzer:
 
@@ -107,15 +118,29 @@ pub struct Expr { pub kind: ExprKind, pub span: Span }
 
 pub enum ExprKind {
     Int(i64),
-    EnumLit(Symbol),
-    Call(Symbol, Vec<Expr>),
-    Binary(BinOp, Box<Expr>, Box<Expr>),
+    Float(f64),
+    Ident(Name),
+    Call(Name, Vec<Expr>),
     Unary(UnOp, Box<Expr>),
+    Binary(BinOp, Box<Expr>, Box<Expr>),
     Error,                     // see error recovery
 }
 ```
 
 One place for the span, clean matching on `.kind`.
+
+`and` and `or` inside a `require` are ordinary `Binary` nodes, nested rather than
+flattened into an `And(Vec<Expr>)`. Flat n-ary nodes would make conjunct-level
+analysis easier, but `require` already gives me conjunct identity where it
+matters, and a uniform `Binary` keeps the parser's precedence chain and the
+evaluator's match to one shape each. Worth revisiting if `any(...)` lands.
+
+`Name` is a `String` plus a `Span`, not an interned `Symbol` — interning is a
+`types` concern, and the parser has no table to intern against.
+
+`Ident(name)` and `Call(name, args)` stay distinct — a bare zero-arg predicate is
+not normalised into `Call(name, vec![])`. The tree stays faithful to what was
+written, which matters when a caret is pointed at it.
 
 ## Parser
 
@@ -131,32 +156,35 @@ unary not, unary -, exists
 call, literal, parenthesised
 ```
 
-Resist a parser-combinator crate. At this grammar size it is more code, and the
+Resist a parser-combinator crate. At this grammar size it's more code, and the
 fight is with the library's type signatures rather than with Rust.
 
 ### Error recovery
 
-Decide this before writing the first function — it is a shape rather than a
+Decide this before writing the first function. It's a shape rather than a
 feature, and retrofitting means rewriting every parse method.
 
-Do not return `Result<Ast, Error>` and stop at the first problem. Collect and
+Don't return `Result<Ast, Error>` and stop at the first problem. Collect and
 continue:
 
 ```
 parse(src) -> (Ast, Vec<Diagnostic>)
 ```
 
-On failure, record the diagnostic, skip forward to the next token that can
-legally start a construct — `require`, `let`, `do`, `priority`, `category`,
-`because`, `rule`, or `}` — and resume. That is panic-mode recovery and it is
-enough. `ExprKind::Error` stands in for whatever failed to parse, and the type
-checker skips those nodes rather than cascading fresh errors off them.
+On failure, record the diagnostic and resume. That's panic-mode recovery, and it
+happens at two levels. Inside a rule body, an unrecognised token reports, bumps
+one token and keeps reading fields — so one bad line doesn't cost the rest of the
+rule. When the rule itself can't be salvaged, `recover` skips to the next `rule`
+keyword, deliberately without an unconditional bump first, which would swallow
+the very rule it's aiming for. `ExprKind::Error` stands in for whatever failed to
+parse, and the type checker skips those nodes rather than cascading fresh errors
+off them.
 
 Two reasons, neither about parsing:
 
 - A file with three typos should show three squiggles. Reporting only the first
-  makes fixing a rule set a serial grind, which is exactly what the current
-  Sprintf layer already inflicts.
+  makes fixing a rule set a serial grind, which is what the current Sprintf layer
+  already inflicts.
 - Completion means parsing incomplete input. `has-role(` with the cursor after
   the paren is the normal state of a file being edited, not an error to report.
   The parser has to produce a usable tree with a hole in it, and the hole needs a
@@ -168,8 +196,8 @@ The lexer takes the same shape: `(Vec<Token>, Vec<Diagnostic>)`.
 ## Evaluator
 
 A tree-walking interpreter, and the oracle for any later backend. Keep it even if
-a wasm backend appears — two independent implementations that must agree on the
-whole corpus is a far better property test than reading bytecode.
+a wasm backend appears — two independent implementations that must agree across
+the whole corpus is a far better property test than reading bytecode.
 
 Evaluation needs a mocked env: a trait the tests implement, holding cash, power,
 unit and building counts, roles, queue state. Deriving those fixtures from
@@ -217,5 +245,5 @@ formatting without a second tool.
 
 A `.rs` file in `src/` that nothing declares is **silently ignored**, not an
 error, and `cargo test` passing tells you nothing about whether a module is wired
-in. To check, append `compile_error!("x")` to the file and build — if it does not
-fail, the file is not in the tree.
+in. To check, append `compile_error!("x")` to the file and build — if it doesn't
+fail, the file isn't in the tree.

@@ -1,14 +1,10 @@
 //! Text to tokens.
 //!
-//! Returns `(Vec<Token>, Vec<Diagnostic>)` — collect errors, never bail on the
-//! first one.
+//! Collects errors rather than bailing, so one bad character does not hide the
+//! rest of the file.
 //!
-//! The one non-obvious rule is kebab identifiers versus `-` as subtraction:
-//! `ground-defense` is one token, `size - 1` is two. See `docs/design.md`, under
-//! "Names", for the exact rule and the case where it bites.
-//!
-//! There is no comment syntax to lex. `because "..."` is a field on a rule and
-//! carries what `//` otherwise would.
+//! The kebab-identifier rule — `ground-defense` is one token, `size - 1` is
+//! three — is in `docs/design.md` under "Names".
 use crate::diag::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
 
@@ -16,10 +12,8 @@ pub fn lex(source: &str) -> (Vec<Token>, Vec<Diagnostic>) {
     Lexer::new(source).run()
 }
 
-/// Borrows the source rather than owning it: a `Lexer` is created inside `lex`,
-/// consumed, and dropped before the function returns, so the lifetime never
-/// escapes. `SourceFile` owns its text for the opposite reason — it is long
-/// lived, and a lifetime there would propagate into everything holding one.
+/// Borrows the source: a `Lexer` is dropped before `lex` returns. `SourceFile`
+/// owns its text because it outlives the call.
 struct Lexer<'a> {
     src: &'a str,
     bytes: &'a [u8],
@@ -49,8 +43,7 @@ impl<'a> Lexer<'a> {
             self.scan_token();
         }
 
-        // An empty span at the end of input, so an "unexpected end of file"
-        // diagnostic has somewhere to point.
+        // Empty span, so an "unexpected end of file" diagnostic can point here.
         self.start = self.pos;
         self.push(TokenKind::Eof);
 
@@ -60,9 +53,8 @@ impl<'a> Lexer<'a> {
     fn scan_token(&mut self) {
         let c = self.bytes[self.pos];
 
-        // Two-character operators are matched before their one-character
-        // prefixes, so `>=` never lexes as `>` followed by `=`. Longest match
-        // wins — see the `longest_match_wins` test.
+        // Maximal munch. Must run before the one-character arms, or `>=` lexes
+        // as `>` then `=`.
         let pair = match (c, self.peek_at(self.pos + 1)) {
             (b'=', Some(b'=')) => Some(TokenKind::EqEq),
             (b'!', Some(b'=')) => Some(TokenKind::NotEq),
@@ -77,7 +69,7 @@ impl<'a> Lexer<'a> {
         }
 
         match c {
-            // whitespace carries no meaning; spans keep the position
+            // No line tracking needed: spans are byte offsets.
             b' ' | b'\t' | b'\r' | b'\n' => {
                 self.pos += 1;
             }
@@ -93,19 +85,16 @@ impl<'a> Lexer<'a> {
             b'<' => self.single(TokenKind::Lt),
             b'>' => self.single(TokenKind::Gt),
 
+            b'=' => self.single(TokenKind::Eq),
+
             b'-' => self.single(TokenKind::Minus),
 
-            // stage 2 / 12 — Number, and Float when a `.` is followed by a digit
             b'0'..=b'9' => self.number(),
 
-            // stage 3 / 4 / 10 — identifier, then TokenKind::keyword() lookup.
             c if c.is_ascii_alphabetic() => self.identifier(),
 
-            // stage 11 — string literal; the span covers both quotes
             b'"' => self.string(),
 
-            // stage 7 — anything else: report and carry on, so the rest of the
-            // file still lexes.
             _ => {
                 self.pos += 1;
                 let text = self.lexeme().to_string();
@@ -123,7 +112,7 @@ impl<'a> Lexer<'a> {
                 .peek_at(self.pos + 1)
                 .is_some_and(|b| b.is_ascii_digit())
         {
-            self.bump(); // consume the `.`
+            self.bump(); // the `.`
             while self.peek().is_some_and(|b| b.is_ascii_digit()) {
                 self.bump();
             }
@@ -155,9 +144,8 @@ impl<'a> Lexer<'a> {
                 Some(b) if b.is_ascii_alphanumeric() => {
                     self.bump();
                 }
-                // The kebab rule: a `-` continues the identifier only when a
-                // letter follows it. `size-one` is one name; `size-1` is
-                // subtraction.
+                // Two bytes of lookahead, so it cannot fold into the arm
+                // above. See docs/design.md, "Names".
                 Some(b'-')
                     if self
                         .peek_at(self.pos + 1)
@@ -199,28 +187,26 @@ impl<'a> Lexer<'a> {
         self.pos >= self.bytes.len()
     }
 
-    /// The next unconsumed byte, or `None` at end of input.
     fn peek(&self) -> Option<u8> {
         self.peek_at(self.pos)
     }
 
-    /// The byte at an absolute offset, or `None` past the end.
-    ///
-    /// Lookahead has to be bounds-safe: a `!` on the final byte of a file must
-    /// not panic while checking whether a `=` follows it. Returning `Option`
-    /// makes end of input a case the caller handles rather than one it forgets.
+    /// `Option` rather than indexing: a `!` on the last byte of the file would
+    /// otherwise panic while checking whether a `=` follows.
     fn peek_at(&self, at: usize) -> Option<u8> {
         self.bytes.get(at).copied()
     }
 
-    /// Consumes one byte and returns it, or `None` at end of input.
     fn bump(&mut self) -> Option<u8> {
         let b = self.peek()?;
         self.pos += 1;
         Some(b)
     }
 
-    /// The source text of the token being scanned, `self.start..self.pos`.
+    /// The source text of the token being scanned.
+    ///
+    /// Safe to slice: both ends were found by matching ASCII, which cannot occur
+    /// inside a multi-byte sequence, so neither lands mid-character.
     fn lexeme(&self) -> &'a str {
         &self.src[self.start..self.pos]
     }
@@ -259,14 +245,8 @@ mod tests {
     use super::*;
     use crate::token::TokenKind;
 
-    // Tests are staged. Remove `#[ignore]` from a block as you implement it,
-    // roughly in the order below — each stage only needs the ones above it.
-    //
-    // If you later decide to emit a trailing `TokenKind::Eof`, `kinds()` is the
-    // single place to filter it out; nothing else here assumes its absence.
-
-    /// Token kinds, with the trailing `Eof` stripped. This is the single place
-    /// that knows `Eof` exists; `emits_eof_at_end` is what pins it down.
+    /// Token kinds, `Eof` stripped. `emits_eof_at_end` is what pins `Eof` down;
+    /// every other test here ignores it.
     fn kinds(src: &str) -> Vec<TokenKind> {
         let (toks, diags) = lex(src);
         assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
@@ -289,7 +269,7 @@ mod tests {
         TokenKind::Identifier(s.to_string())
     }
 
-    // ---- stage 1: nothing at all ----
+    // ---- trivial input ----
 
     #[test]
     fn empty_input_yields_nothing() {
@@ -301,7 +281,7 @@ mod tests {
         assert_eq!(kinds("   \n\t  \r\n "), vec![]);
     }
 
-    // ---- stage 2: numbers ----
+    // ---- numbers ----
 
     #[test]
     fn single_digit() {
@@ -315,14 +295,13 @@ mod tests {
 
     #[test]
     fn oversized_integer_reports_instead_of_panicking() {
-        // A literal too large for i64 is bad input, not a compiler bug — so it
-        // must not unwrap. The placeholder keeps the parser's shape.
+        // Bad input, not a compiler bug: it reports rather than unwraps.
         let (toks, diags) = lex("99999999999999999999");
         assert_eq!(diags.len(), 1, "{diags:?}");
         assert_eq!(toks[0].kind, TokenKind::Number(0));
     }
 
-    // ---- stage 3: plain identifiers ----
+    // ---- identifiers ----
 
     #[test]
     fn simple_identifier() {
@@ -331,7 +310,7 @@ mod tests {
 
     #[test]
     fn identifier_may_contain_digits() {
-        // `e1` is a real UnitType: a digit straight after a letter stays in.
+        // `e1` is a real UnitType, so a digit straight after a letter stays in.
         assert_eq!(kinds("e1"), vec![ident("e1")]);
     }
 
@@ -345,9 +324,8 @@ mod tests {
 
     #[test]
     fn identifier_may_start_with_a_capital() {
-        // Queue literals are capitalised by convention (`Building`, `Infantry`);
-        // everything else is lowercase kebab. The lexer does not care — only the
-        // enum tables in types.rs do. See docs/design.md, "The enums".
+        // Queue literals are capitalised by convention. The lexer doesn't care;
+        // only the enum tables in types.rs do.
         assert_eq!(
             kinds("Building Infantry"),
             vec![ident("Building"), ident("Infantry")]
@@ -356,12 +334,11 @@ mod tests {
 
     #[test]
     fn keywords_are_case_sensitive() {
-        // `rule` is a keyword; `Rule` is an identifier. Matching case-insensitively
-        // would swallow capitalised enum literals.
+        // Case-insensitive matching would swallow capitalised enum literals.
         assert_eq!(kinds("Rule Require"), vec![ident("Rule"), ident("Require")]);
     }
 
-    // ---- stage 4: the kebab rule (docs/design.md, "Names") ----
+    // ---- the kebab rule (docs/design.md, "Names") ----
 
     #[test]
     fn hyphen_between_letters_stays_in_the_identifier() {
@@ -395,14 +372,13 @@ mod tests {
 
     #[test]
     fn hyphen_followed_by_letter_is_absorbed_even_when_wrong() {
-        // The documented footgun: this is one identifier, not `size - one`.
-        // types.rs is what catches it, not the lexer.
+        // The documented footgun: types.rs catches this, not the lexer.
         assert_eq!(kinds("size-one"), vec![ident("size-one")]);
     }
 
     #[test]
     fn hyphen_after_a_paren_is_subtraction() {
-        // `)` is not an identifier character, so nothing to continue.
+        // `)` is not an identifier character, so there is nothing to continue.
         assert_eq!(
             kinds("aircraft-capacity() - 1"),
             vec![
@@ -420,7 +396,7 @@ mod tests {
         assert_eq!(kinds("-5"), vec![TokenKind::Minus, TokenKind::Number(5)]);
     }
 
-    // ---- stage 5: operators and punctuation ----
+    // ---- operators and punctuation ----
 
     #[test]
     fn arithmetic_operators() {
@@ -448,7 +424,7 @@ mod tests {
         );
     }
 
-    // ---- stage 6: spans ----
+    // ---- spans ----
 
     #[test]
     #[ignore = "stage 6"]
@@ -477,7 +453,7 @@ mod tests {
         assert_eq!(spans("\u{2014} cash"), vec![(ident("cash"), 4, 8)]);
     }
 
-    // ---- stage 7: errors, and carrying on past them ----
+    // ---- error recovery ----
 
     #[test]
     fn unknown_character_reports_and_continues() {
@@ -503,7 +479,7 @@ mod tests {
         );
     }
 
-    // ---- stage 8: braces and commas ----
+    // ---- braces and commas ----
 
     #[test]
     fn braces_and_comma() {
@@ -521,7 +497,7 @@ mod tests {
         );
     }
 
-    // ---- stage 9: comparison operators, and maximal munch ----
+    // ---- comparison operators ----
 
     #[test]
     fn two_character_comparisons() {
@@ -534,6 +510,25 @@ mod tests {
                 TokenKind::GtEq
             ]
         );
+    }
+
+    #[test]
+    fn bare_equals_is_its_own_token() {
+        assert_eq!(
+            kinds("let size = 5"),
+            vec![
+                TokenKind::Let,
+                ident("size"),
+                TokenKind::Eq,
+                TokenKind::Number(5)
+            ]
+        );
+    }
+
+    #[test]
+    fn double_equals_still_wins() {
+        // Maximal munch: `==` must not lex as two `Eq`.
+        assert_eq!(kinds("= =="), vec![TokenKind::Eq, TokenKind::EqEq]);
     }
 
     #[test]
@@ -565,7 +560,7 @@ mod tests {
         );
     }
 
-    // ---- stage 10: keywords ----
+    // ---- keywords ----
 
     #[test]
     fn keywords_are_their_own_kinds() {
@@ -599,7 +594,7 @@ mod tests {
 
     #[test]
     fn a_word_that_merely_starts_with_a_keyword_is_an_identifier() {
-        // Scan the whole identifier first, then look it up. Matching keywords
+        // Scan the whole identifier, then look it up. Matching keyword text
         // directly would split `rules` into `rule` + `s`.
         assert_eq!(
             kinds("rules required nothing"),
@@ -613,7 +608,7 @@ mod tests {
         assert_eq!(kinds("do-thing"), vec![ident("do-thing")]);
     }
 
-    // ---- stage 11: string literals (for `because "..."`) ----
+    // ---- strings ----
 
     #[test]
     fn string_literal_holds_its_contents_without_quotes() {
@@ -643,7 +638,7 @@ mod tests {
         assert_eq!(diags.len(), 1, "expected one diagnostic: {diags:?}");
     }
 
-    // ---- stage 12: floats (for `squad-ready-ratio >= 0.7`) ----
+    // ---- floats ----
 
     #[test]
     fn float_literal() {
@@ -668,7 +663,7 @@ mod tests {
         );
     }
 
-    // ---- stage 13: end of input ----
+    // ---- end of input ----
 
     #[test]
     fn emits_eof_at_end() {

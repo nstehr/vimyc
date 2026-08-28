@@ -1,11 +1,6 @@
 //! What the lexer produces and the parser consumes.
 //!
-//! Its own module rather than living with either: the lexer emits these and the
-//! parser reads them, so putting them in one would make that module a dependency
-//! of the other for no reason.
-//!
-//! Every token carries a `Span`. See `docs/design.md` under "Names" for the
-//! kebab-identifier rule, which is the one place tokenising is not obvious.
+//! Its own module so neither of them has to depend on the other.
 
 use crate::diag::Span;
 
@@ -15,9 +10,9 @@ pub struct Token {
     pub span: Span,
 }
 
-/// Note the absence of `Eq`: `Float` holds an `f64`, and `NaN != NaN` means
-/// floats are only `PartialEq`. `==` still works, which is all the parser needs;
-/// what is lost is using a `TokenKind` as a `HashMap` key.
+/// `PartialEq` but no `Eq`, because `Float` holds an `f64` and `NaN != NaN`.
+/// The parser only ever compares kinds, so the cost is not being able to use one
+/// as a `HashMap` key.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // literals and names
@@ -53,6 +48,9 @@ pub enum TokenKind {
     Minus,
     Asterisk,
     Slash,
+
+    /// Bare `=`, as in `let size = 5`. Distinct from `EqEq`.
+    Eq,
 
     // comparison
     EqEq,
