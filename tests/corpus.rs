@@ -128,9 +128,52 @@ fn seed_preserves_rule_order() {
 
 /// Milestone 2 — every seed condition type checks as a bool.
 #[test]
-#[ignore = "milestone 2"]
 fn seed_type_checks() {
-    unimplemented!("wire up the type checker");
+    let ast = parse_seed();
+    let diags = vimyc::check::check(&ast);
+    assert!(diags.is_empty(), "seed.vy does not type check: {diags:?}");
+}
+
+/// The checks that make the language worth having. Each of these is accepted by
+/// `expr` today and silently produces a rule that never fires.
+#[test]
+fn typos_are_caught() {
+    fn errors(src: &str) -> Vec<String> {
+        let (tokens, lex_diags) = vimyc::lexer::lex(src);
+        assert!(lex_diags.is_empty(), "{lex_diags:?}");
+        let (ast, parse_diags) = vimyc::parser::parse(&tokens);
+        assert!(parse_diags.is_empty(), "{parse_diags:?}");
+        vimyc::check::check(&ast)
+            .into_iter()
+            .map(|d| d.message)
+            .collect()
+    }
+
+    fn rule_with(require: &str) -> String {
+        format!(
+            "rule r {{\n  priority 1\n  category economy\n  do scout\n  require {require}\n}}\n"
+        )
+    }
+
+    // The motivating example: a misspelled role.
+    let e = errors(&rule_with("has-role(war-facotry)"));
+    assert_eq!(e.len(), 1, "{e:?}");
+    assert!(e[0].contains("unknown role"), "{e:?}");
+    assert!(e[0].contains("did you mean `war-factory`"), "{e:?}");
+
+    // A real name, but from the wrong domain.
+    let e = errors(&rule_with("has-building(e1)"));
+    assert_eq!(e.len(), 1, "{e:?}");
+    assert!(e[0].contains("unknown building"), "{e:?}");
+
+    // An optional used as a bool — `NearestEnemy() != nil` in expr.
+    let e = errors(&rule_with("nearest-enemy"));
+    assert_eq!(e.len(), 1, "{e:?}");
+    assert!(e[0].contains("optional"), "{e:?}");
+
+    // One mistake, one message: `Type::Error` must not cascade.
+    let e = errors(&rule_with("cash >= 300 and has-role(war-facotry)"));
+    assert_eq!(e.len(), 1, "a single typo should report once: {e:?}");
 }
 
 /// Milestone 3 — the interpreter agrees with expr on every seed condition.

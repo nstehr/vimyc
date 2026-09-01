@@ -2,6 +2,7 @@
 //! subcommands it is headed for (`check`, `fmt`, `eval`).
 use std::env;
 use vimyc::ast::{Expr, ExprKind, Rule};
+use vimyc::check::check;
 use vimyc::diag::{Diagnostic, SourceFile};
 use vimyc::lexer::lex;
 use vimyc::parser::parse;
@@ -46,11 +47,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (ast, parse_diags) = parse(&tokens);
     report(&src, &parse_diags);
 
+    // Only worth running on a tree that parsed: type errors off the back of a
+    // syntax error are noise.
+    let type_diags = if parse_diags.is_empty() {
+        let d = check(&ast);
+        report(&src, &d);
+        d.len()
+    } else {
+        0
+    };
+
     for rule in &ast.rules {
         print_rule(rule);
     }
 
-    finish(lex_diags.len() + parse_diags.len())
+    finish(lex_diags.len() + parse_diags.len() + type_diags)
 }
 
 fn report(src: &SourceFile, diags: &[Diagnostic]) {

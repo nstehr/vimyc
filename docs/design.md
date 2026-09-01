@@ -101,16 +101,32 @@ Rule names alone wouldn't need any of this; they only appear after `rule`, where
 nothing else is legal. The general rule exists so squad names and categories,
 which show up in expression positions, can look the same.
 
-### Source spelling is not the wire format
+### Go adapts to the language, not the reverse
 
-Enum literals are interned, so what you type and what reaches Go are independent.
-The Go side is inconsistent — rule and squad names are kebab (`build-power`,
-`ground-defense`), categories are snake (`squad_form`, `air_combat`) — and those
-strings are keys in `rule_firings.rule_name` and `rule_set_json`. Changing them
-orphans the existing tuning history.
+The language defines its own vocabulary, uniformly kebab. There is **no mapping
+table in `env.rs`**. An earlier version derived Go's spellings and it was
+removed: nothing emits yet, and it made the language carry a consumer's
+historical inconsistency.
 
-So: source stays uniformly kebab, one mapping table on emit. The compatibility
-constraint is on emission, not on syntax.
+The Go side is inconsistent today — rule and squad names are kebab
+(`build-power`, `ground-defense`), roles and categories are snake
+(`war_factory`, `squad_form`), predicates are PascalCase Go methods.
+Reconciling that is Go's problem, in three passes:
+
+1. **Now** — change what is free. Measured against `vimy-core`: 19 category
+   strings contain underscores (not persisted anywhere; 16 test assertions
+   reference three of them), and 56 `ActionRegistry` keys — a map that is
+   *declared and never read* in the entire repo. Squad names are already kebab.
+2. **Next** — build vimyc without accommodating any of it.
+3. **Later** — once vimyc actually emits, align the rest against a real
+   consumer, when it is testable rather than speculative.
+
+Two things stay unreconciled by design. OpenRA's actor and queue names (`powr`,
+`e1`, `Building`) are not Vimy's to rename. And roles are entangled well beyond
+the rule engine: persisted in `doctrine_json` as `preferred_infantry` arrays,
+written by hand into BAML prompt text and few-shot examples, and fed back to the
+LLM by `QueryExemplarDoctrines` — so renaming them would leave the exemplar
+history disagreeing with the instructions.
 
 ## No comments
 

@@ -8,6 +8,7 @@
 //! decisions that are expensive to reverse, in `docs/implementation.md`.
 
 pub mod ast;
+pub mod check;
 pub mod diag;
 pub mod env;
 pub mod eval;
