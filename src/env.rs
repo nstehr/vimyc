@@ -10,8 +10,36 @@
 
 use crate::types::{Domain, ParamType, Type};
 
+/// Identifies a predicate without going through its spelling.
+///
+/// Dispatching on this rather than on `&str` means adding a predicate is a
+/// compile error in the evaluator rather than a runtime panic when a rule
+/// finally names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Predicate {
+    Cash,
+    PowerExcess,
+    BaseUnderAttack,
+    EnemiesVisible,
+    HasEnemyIntel,
+    HasUnit,
+    HasBuilding,
+    HasRole,
+    CanBuildRole,
+    QueueBusy,
+    QueueReady,
+    CanBuild,
+    SquadReadyRatio,
+    NearestEnemy,
+}
+
+/// Not a `Signature`: `count` is overloaded across three domains and resolved by
+/// its argument, so it has no single row.
+pub const COUNT: &str = "count";
+
 /// One predicate's signature.
 pub struct Signature {
+    pub id: Predicate,
     pub name: &'static str,
     pub params: &'static [ParamType],
     pub ret: Type,
@@ -41,56 +69,67 @@ pub const BUILDABLE: &[Domain] = &[Domain::BuildingType, Domain::UnitType];
 /// resolved by its argument, so it cannot be a row here.
 pub const PREDICATES: &[Signature] = &[
     Signature {
+        id: Predicate::Cash,
         name: "cash",
         params: &[],
         ret: Type::Int,
     },
     Signature {
+        id: Predicate::PowerExcess,
         name: "power-excess",
         params: &[],
         ret: Type::Int,
     },
     Signature {
+        id: Predicate::BaseUnderAttack,
         name: "base-under-attack",
         params: &[],
         ret: Type::Bool,
     },
     Signature {
+        id: Predicate::EnemiesVisible,
         name: "enemies-visible",
         params: &[],
         ret: Type::Bool,
     },
     Signature {
+        id: Predicate::HasEnemyIntel,
         name: "has-enemy-intel",
         params: &[],
         ret: Type::Bool,
     },
     Signature {
+        id: Predicate::HasUnit,
         name: "has-unit",
         params: &[ParamType::Exact(Type::Enum(Domain::UnitType))],
         ret: Type::Bool,
     },
     Signature {
+        id: Predicate::HasBuilding,
         name: "has-building",
         params: &[ParamType::Exact(Type::Enum(Domain::BuildingType))],
         ret: Type::Bool,
     },
     Signature {
+        id: Predicate::HasRole,
         name: "has-role",
         params: &[ParamType::Exact(Type::Enum(Domain::Role))],
         ret: Type::Bool,
     },
     Signature {
+        id: Predicate::CanBuildRole,
         name: "can-build-role",
         params: &[ParamType::Exact(Type::Enum(Domain::Role))],
         ret: Type::Bool,
     },
     Signature {
+        id: Predicate::QueueBusy,
         name: "queue-busy",
         params: &[ParamType::Exact(Type::Enum(Domain::Queue))],
         ret: Type::Bool,
     },
     Signature {
+        id: Predicate::QueueReady,
         name: "queue-ready",
         params: &[ParamType::Exact(Type::Enum(Domain::Queue))],
         ret: Type::Bool,
@@ -98,6 +137,7 @@ pub const PREDICATES: &[Signature] = &[
     // A building or a unit depending on the queue: Go's
     // `CanBuild("Infantry", "e1")` is as real as `CanBuild("Building", "powr")`.
     Signature {
+        id: Predicate::CanBuild,
         name: "can-build",
         params: &[
             ParamType::Exact(Type::Enum(Domain::Queue)),
@@ -106,11 +146,13 @@ pub const PREDICATES: &[Signature] = &[
         ret: Type::Bool,
     },
     Signature {
+        id: Predicate::SquadReadyRatio,
         name: "squad-ready-ratio",
         params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
         ret: Type::Float,
     },
     Signature {
+        id: Predicate::NearestEnemy,
         name: "nearest-enemy",
         params: &[],
         ret: Type::Option(&Type::Enemy),

@@ -1,0 +1,11 @@
+{
+  "cash": 450,
+  "power_excess": 120,
+  "buildings": { "fact": 1, "powr": 1, "proc": 1 },
+  "roles": ["construction-yard", "power-plant", "refinery", "barracks"],
+  "buildable_roles": ["barracks", "war-factory"],
+  "can_build": ["Building/powr", "Building/weap", "Infantry/e1"],
+  "units": { "e1": 4 },
+  "queues_ready": [],
+  "collections": { "idle-ground-units": 4, "idle-harvesters": 1, "damaged-buildings": 0 }
+}

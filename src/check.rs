@@ -46,6 +46,8 @@ impl Checker {
             }
             .rule(rule);
         }
+        self.check_priority_collisions(ast);
+        self.check_shadowed_rules(ast);
     }
 }
 
@@ -117,7 +119,7 @@ impl<'a> RuleChecker<'a> {
             // The parser already reported.
             ExprKind::Error => Type::Error,
             ExprKind::Call(n, args) => {
-                if n.text == "count" {
+                if n.text == env::COUNT {
                     self.count(args, n.span)
                 } else if let Some(sig) = env::predicate(&n.text) {
                     if args.len() != sig.params.len() {
@@ -178,18 +180,35 @@ impl<'a> RuleChecker<'a> {
                     Type::Bool
                 }
 
-                BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => {
+                BinOp::Eq | BinOp::NotEq => {
                     let lt = self.synth(left);
                     let rt = self.synth(right);
-                    if matches!(lt, Type::Option(_)) || matches!(rt, Type::Option(_)) {
-                        self.error(e.span, "use `exists` to test an optional value".to_string());
-                    } else if !lt.compatible(&rt) {
+                    if self.reject_optional(&lt, &rt, e.span) && !lt.compatible(&rt) {
                         let msg = format!("cannot compare {lt} with {rt}");
                         self.error(e.span, msg);
                     }
                     // `Bool` even after an error — a comparison is a bool
                     // whatever its operands were, and saying so keeps one
                     // mistake to one message.
+                    Type::Bool
+                }
+
+                // Ordering needs numbers where equality does not. Without the
+                // split, `base-under-attack < enemies-visible` type checks, and
+                // the evaluator would have to invent an ordering on bools or
+                // panic on a program the checker accepted.
+                BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq => {
+                    let lt = self.synth(left);
+                    let rt = self.synth(right);
+                    if self.reject_optional(&lt, &rt, e.span) {
+                        if !lt.is_numeric() || !rt.is_numeric() {
+                            let msg = format!("cannot order {lt} and {rt}");
+                            self.error(e.span, msg);
+                        } else if !lt.compatible(&rt) {
+                            let msg = format!("cannot compare {lt} with {rt}");
+                            self.error(e.span, msg);
+                        }
+                    }
                     Type::Bool
                 }
 
@@ -211,6 +230,16 @@ impl<'a> RuleChecker<'a> {
                 }
             },
         }
+    }
+
+    /// Reports an optional used as a value, returning whether checking should
+    /// continue — so one mistake does not also produce a comparison error.
+    fn reject_optional(&mut self, lt: &Type, rt: &Type, span: Span) -> bool {
+        if matches!(lt, Type::Option(_)) || matches!(rt, Type::Option(_)) {
+            self.error(span, "use `exists` to test an optional value".to_string());
+            return false;
+        }
+        true
     }
 
     /// Top-down: whether this expression fits an expected type.
@@ -377,16 +406,89 @@ impl Checker {
     //
     // The checks Go structurally cannot do. See `docs/design.md`.
 
-    fn check_squad_references(&mut self, _ast: &Ast) {
-        todo!("every squad-exists(X) needs a reachable form-squad(X, ...)")
+    /// Two rules sharing a category and a priority.
+    ///
+    /// Go sorts by priority with `sort.Slice`, which is not stable, so equal
+    /// priorities order arbitrarily. Within a category that decides which of the
+    /// two an exclusive rule blocks — a coin flip that can land differently
+    /// between runs of the same rule set.
+    fn check_priority_collisions(&mut self, ast: &Ast) {
+        for (i, a) in ast.rules.iter().enumerate() {
+            for b in &ast.rules[i + 1..] {
+                if a.priority == b.priority && a.category.text == b.category.text {
+                    let msg = format!(
+                        "`{}` and `{}` share priority {} in category `{}`, so their order is undefined",
+                        a.name.text, b.name.text, a.priority, a.category.text
+                    );
+                    self.diags.push(Diagnostic {
+                        message: msg,
+                        span: b.name.span,
+                    });
+                }
+            }
+        }
     }
 
-    fn check_priority_collisions(&mut self, _ast: &Ast) {
-        todo!("two rules sharing a category and a priority order nondeterministically")
+    /// A rule that can never fire because an exclusive rule above it always
+    /// fires first.
+    ///
+    /// Sound but deliberately narrow: if the higher rule's conjuncts are a
+    /// subset of the lower one's, then whenever the lower rule's conditions hold
+    /// the higher one's do too. Anything cleverer needs implication rather than
+    /// containment, which needs a solver.
+    fn check_shadowed_rules(&mut self, ast: &Ast) {
+        // Every pair, not just earlier ones: "higher" is decided by priority, and
+        // the engine sorts by priority regardless of where a rule sits in the
+        // file.
+        for (i, lower) in ast.rules.iter().enumerate() {
+            for (j, higher) in ast.rules.iter().enumerate() {
+                if i == j
+                    || !higher.exclusive
+                    || higher.category.text != lower.category.text
+                    || higher.priority <= lower.priority
+                {
+                    continue;
+                }
+                let covered = higher
+                    .requires
+                    .iter()
+                    .all(|h| lower.requires.iter().any(|l| same_expr(h, l)));
+                if covered {
+                    let msg = format!(
+                        "`{}` can never fire: `{}` is exclusive, higher priority, and its conditions are implied by these",
+                        lower.name.text, higher.name.text
+                    );
+                    self.diags.push(Diagnostic {
+                        message: msg,
+                        span: lower.name.span,
+                    });
+                }
+            }
+        }
     }
+}
 
-    fn check_shadowed_rules(&mut self, _ast: &Ast) {
-        todo!("a rule below a higher-priority exclusive one in the same category")
+/// Structural equality, ignoring spans.
+///
+/// Two conjuncts written in different places are the same condition, so the
+/// derived `PartialEq` would be wrong here even if `Expr` had one.
+fn same_expr(a: &Expr, b: &Expr) -> bool {
+    match (&a.kind, &b.kind) {
+        (ExprKind::Int(x), ExprKind::Int(y)) => x == y,
+        (ExprKind::Float(x), ExprKind::Float(y)) => x == y,
+        (ExprKind::Ident(x), ExprKind::Ident(y)) => x.text == y.text,
+        (ExprKind::Call(x, xs), ExprKind::Call(y, ys)) => {
+            x.text == y.text
+                && xs.len() == ys.len()
+                && xs.iter().zip(ys).all(|(p, q)| same_expr(p, q))
+        }
+        (ExprKind::Unary(xo, x), ExprKind::Unary(yo, y)) => xo == yo && same_expr(x, y),
+        (ExprKind::Binary(xo, xl, xr), ExprKind::Binary(yo, yl, yr)) => {
+            xo == yo && same_expr(xl, yl) && same_expr(xr, yr)
+        }
+        // Two holes are not known to be the same condition.
+        (ExprKind::Error, _) | (_, ExprKind::Error) => false,
+        _ => false,
     }
 }
 
@@ -423,4 +525,99 @@ fn edit_distance(a: &str, b: &str) -> usize {
         std::mem::swap(&mut prev, &mut cur);
     }
     prev[b.len()]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::lex;
+    use crate::parser::parse;
+
+    fn errors(src: &str) -> Vec<String> {
+        let (tokens, ld) = lex(src);
+        assert!(ld.is_empty(), "{ld:?}");
+        let (ast, pd) = parse(&tokens);
+        assert!(pd.is_empty(), "{pd:?}");
+        check(&ast).into_iter().map(|d| d.message).collect()
+    }
+
+    #[test]
+    fn equal_priorities_in_one_category_are_reported() {
+        let e = errors(
+            "rule a {\n priority 5\n category economy\n do scout\n require cash >= 1\n}\n\
+             rule b {\n priority 5\n category economy\n do scout\n require cash >= 2\n}\n",
+        );
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(e[0].contains("share priority 5"), "{e:?}");
+    }
+
+    #[test]
+    fn equal_priorities_in_different_categories_are_fine() {
+        let e = errors(
+            "rule a {\n priority 5\n category economy\n do scout\n require cash >= 1\n}\n\
+             rule b {\n priority 5\n category combat\n do scout\n require cash >= 2\n}\n",
+        );
+        assert!(e.is_empty(), "{e:?}");
+    }
+
+    #[test]
+    fn a_rule_under_a_broader_exclusive_one_can_never_fire() {
+        // `a` requires strictly less than `b`, so whenever `b` would fire `a`
+        // already has, and `a` is exclusive.
+        let e = errors(
+            "rule a {\n priority 9\n category economy exclusive\n do scout\n require cash >= 1\n}\n\
+             rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n require has-role(barracks)\n}\n",
+        );
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(e[0].contains("can never fire"), "{e:?}");
+    }
+
+    #[test]
+    fn shadowing_is_found_whichever_order_the_rules_appear() {
+        // "Higher" means priority, not position, so both orderings must report.
+        let hi = "rule a {\n priority 9\n category economy exclusive\n do scout\n require cash >= 1\n}\n";
+        let lo = "rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n require has-role(barracks)\n}\n";
+
+        let forward = errors(&format!("{hi}{lo}"));
+        let reversed = errors(&format!("{lo}{hi}"));
+        assert_eq!(forward.len(), 1, "{forward:?}");
+        assert_eq!(reversed.len(), 1, "low-priority rule first: {reversed:?}");
+        assert_eq!(forward, reversed);
+    }
+
+    #[test]
+    fn ordering_needs_numbers() {
+        let e = errors(
+            "rule r {\n priority 1\n category economy\n do scout\n require base-under-attack < enemies-visible\n}\n",
+        );
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(e[0].contains("cannot order"), "{e:?}");
+    }
+
+    #[test]
+    fn equality_still_works_on_bools() {
+        let e = errors(
+            "rule r {\n priority 1\n category economy\n do scout\n require base-under-attack == enemies-visible\n}\n",
+        );
+        assert!(e.is_empty(), "{e:?}");
+    }
+
+    #[test]
+    fn a_narrower_rule_above_does_not_shadow() {
+        // `a` requires *more* than `b`, so `b` can still fire on its own.
+        let e = errors(
+            "rule a {\n priority 9\n category economy exclusive\n do scout\n require cash >= 1\n require has-role(barracks)\n}\n\
+             rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n}\n",
+        );
+        assert!(e.is_empty(), "{e:?}");
+    }
+
+    #[test]
+    fn a_non_exclusive_rule_above_does_not_shadow() {
+        let e = errors(
+            "rule a {\n priority 9\n category economy\n do scout\n require cash >= 1\n}\n\
+             rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n require has-role(barracks)\n}\n",
+        );
+        assert!(e.is_empty(), "{e:?}");
+    }
 }

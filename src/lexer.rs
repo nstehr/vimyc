@@ -95,10 +95,16 @@ impl<'a> Lexer<'a> {
 
             b'"' => self.string(),
 
+            // Advances a whole scalar rather than a byte: this is the one arm
+            // non-ASCII input reaches, and leaving `pos` inside a multi-byte
+            // character panics the next time the source is sliced.
             _ => {
-                self.pos += 1;
-                let text = self.lexeme().to_string();
-                self.error(format!("unexpected character `{text}`"));
+                let c = self.src[self.pos..]
+                    .chars()
+                    .next()
+                    .expect("not at end of input");
+                self.pos += c.len_utf8();
+                self.error(format!("unexpected character `{c}`"));
             }
         }
     }
@@ -467,6 +473,30 @@ mod tests {
             .filter(|k| *k != TokenKind::Eof)
             .collect();
         assert_eq!(ks, vec![ident("cash"), ident("powr")]);
+    }
+
+    #[test]
+    fn non_ascii_reports_instead_of_panicking() {
+        // Advancing one byte here used to leave `pos` inside the character and
+        // panic on the next slice.
+        let (_, diags) = lex("\u{a7}");
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert!(
+            diags[0].message.contains('\u{a7}'),
+            "{:?}",
+            diags[0].message
+        );
+    }
+
+    #[test]
+    fn non_ascii_does_not_swallow_what_follows() {
+        let toks: Vec<TokenKind> = lex("\u{2014} cash")
+            .0
+            .into_iter()
+            .map(|t| t.kind)
+            .filter(|k| *k != TokenKind::Eof)
+            .collect();
+        assert_eq!(toks, vec![ident("cash")]);
     }
 
     #[test]

@@ -3,12 +3,12 @@ name = "vimyc"
 version = "0.1.0"
 edition = "2024"
 
-# No runtime dependencies on purpose. The lexer, parser, type checker and
-# evaluator are hand-written — that is the point of the project. Reach for
-# `miette` or `ariadne` only once diagnostics are worth polishing, and for a
-# wasm backend only once the interpreter is correct.
+# The compiler itself is hand-written — lexer, parser, type checker, evaluator.
+# That is the point of the project, so those stay dependency-free.
+#
+# serde is the exception: game state has to cross between Rust and Go for the
+# differential test, and hand-rolling a JSON parser teaches nothing this project
+# is about.
 [dependencies]
-
-[dev-dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
