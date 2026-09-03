@@ -326,6 +326,64 @@ None over 60. One `require` per line, never wrap.
 The doctrine-compiled rules reach 575 characters, so breaking arrives eventually.
 Reach for the Wadler/Lindig document algebra then, not before.
 
+## Evaluation semantics, and Go's shared memory
+
+Go's `Evaluate` is **stateful within a tick**. Actions mutate `RuleEnv.Memory`
+as the loop runs, and later rules read it: `FormSquad` writes `Memory["squads"]`,
+`SquadExists` reads it, and `CompileDoctrine` deliberately places `form-squad` at
+`priority + SquadFormBonus` — five above the squad-act rule it feeds, in the same
+tick.
+
+vimyc evaluates every rule against one immutable `State`. These do not agree, and
+the difference is not a bug in either.
+
+That matters differently depending on what vimyc is being asked to do:
+
+**As a compiler** — vimyc emits a rule set and Go's loop runs it unchanged. The
+question does not arise, and this is the actual goal.
+
+`Memory` stays on the Go side throughout. vimyc's `State` is a projection of
+`RuleEnv`, not of `model.GameState` — every field answers "what does this env
+method return", so `squad_ready` and `has_enemy_intel` arrive as resolved facts
+with no trace of the map they were computed from. That is what makes the
+following work without any effect modelling in vimyc.
+
+**As a predictor** (shadow mode, counterfactuals) — solvable by snapshotting
+**per rule rather than per tick**. Go projects the env at the moment it evaluates
+each rule, so earlier actions in the same tick are already reflected. vimyc then
+evaluates rule *i* against state *i*. Exact, and it needs no `Memory` modelling
+in vimyc at all — Go has already resolved it.
+
+**As a runtime** — the only genuinely hard case, needing either declared action
+effects (`form-squad(X, …)` implies `squad-exists(X)` afterwards) or accepting a
+tick of latency between forming and acting. Not on the roadmap.
+
+### Recording skipped rules
+
+Go's loop skips a rule in an already-claimed category **without evaluating it**.
+A per-rule recording must still project the state for those and mark them
+skipped, rather than omitting them.
+
+Two reasons. The shadow comparison stays honest, because vimyc must skip them
+too. And "would `build-refinery` have fired if `build-power` had not?" is exactly
+the counterfactual worth asking — it is cheap to record and impossible to
+recover later.
+
+### What counterfactual replay can and cannot answer
+
+Against a recorded stream of `(tick, rule, state, fired | skipped)`:
+
+- **Yes** — why a rule did not fire (`eval::conjuncts` gives per-conjunct truth),
+  what a different rule set would have done at that moment, whether a different
+  threshold would have changed the outcome.
+- **No** — anything where the game itself diverges. A counterfactual that builds
+  a refinery at tick 100 changes every later state, and a state that never
+  existed cannot be recovered from a recording. A rule set that forms a squad Go
+  never formed will see `squad-exists` false forever after, for the same reason.
+
+Replay-style counterfactuals, not branching-world ones. The first is what tuning
+actually needs.
+
 ## Deliberately out of scope for v0
 
 `reserve` declarations, doctrine parameter declarations, rule-level guards

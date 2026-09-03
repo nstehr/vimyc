@@ -6,7 +6,7 @@
 //!
 //! Reasoning is in `docs/implementation.md`.
 
-use crate::ast::{Ast, BinOp, Expr, ExprKind, Let, Name, Rule, UnOp};
+use crate::ast::{Action, Ast, BinOp, Expr, ExprKind, Let, Name, Rule, UnOp};
 use crate::diag::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
 
@@ -62,7 +62,7 @@ impl<'a> Parser<'a> {
         let mut priority: Option<i64> = None;
         let mut category: Option<Name> = None;
         let mut exclusive = false;
-        let mut action: Option<Name> = None;
+        let mut action: Option<Action> = None;
         let mut because: Option<String> = None;
         let mut lets: Vec<Let> = Vec::new();
         let mut requires: Vec<Expr> = Vec::new();
@@ -94,11 +94,11 @@ impl<'a> Parser<'a> {
                 TokenKind::Do => {
                     let kw = self.peek_span();
                     self.bump(); // `do`
-                    if let Some(n) = self.name() {
+                    if let Some(a) = self.action() {
                         if action.is_some() {
                             self.error(kw, "duplicate `do`".into());
                         }
-                        action = Some(n);
+                        action = Some(a);
                     }
                 }
                 TokenKind::Because => {
@@ -423,6 +423,42 @@ impl<'a> Parser<'a> {
             self.error(span, "expected a number".into());
             None
         }
+    }
+
+    /// An action name, with arguments when it is built by a factory.
+    fn action(&mut self) -> Option<Action> {
+        let name = self.name()?;
+        let start = name.span;
+        if !self.at(&TokenKind::LParen) {
+            return Some(Action {
+                span: start,
+                name,
+                args: Vec::new(),
+            });
+        }
+
+        self.bump(); // `(`
+        let mut args = Vec::new();
+        if !self.at(&TokenKind::RParen) {
+            loop {
+                args.push(self.expr());
+                if !self.eat(&TokenKind::Comma) {
+                    break;
+                }
+                if self.at(&TokenKind::RParen) || self.at_end() {
+                    break;
+                }
+            }
+        }
+        let close = self.peek_span();
+        if !self.eat(&TokenKind::RParen) {
+            self.error(close, "expected `)` to close the argument list".into());
+        }
+        Some(Action {
+            span: start.to(close),
+            name,
+            args,
+        })
     }
 
     /// Returns an owned `String` rather than an interned symbol: `because` text

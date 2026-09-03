@@ -78,3 +78,73 @@ a first-class `reserve` declaration and param-gated conjuncts.
 
 Not verified: runtime behavioural equivalence, and whether guards on if/else rule
 pairs partition correctly.
+
+## Real doctrines
+
+`vimy-core/rules/real_doctrines.json` holds 500 doctrines sampled from the 4,876
+archived across 64 real games, embedded so tests need no database. It is what
+drives the manifest and the differential generator.
+
+Randomly generated doctrines turned out to be a poor stand-in. Real LLM output is
+strongly clustered, so uniform sampling both tests rule shapes that never occur
+and under-tests the ones that dominate:
+
+| field | real mean | range seen |
+|---|---|---|
+| `naval_weight` | 0.011 | almost always 0 |
+| `economy_priority` | 0.761 | rarely below 0.3 |
+| `ground_defense_priority` | 0.719 | never below 0.3 |
+| `capture_priority` | 0.09 | mostly 0 |
+| `superweapon_priority` | 0.165 | mostly 0 |
+
+Nothing ever reaches 1.0. The 500-doctrine sample reproduces every mean above to
+three decimal places.
+
+Regenerate from the sidecar's database:
+
+```sql
+sqlite3 ~/.vimy/vimy.db "select distinct doctrine_json from archived_doctrines"
+```
+
+then drop `name` and `rationale` (prose, and not read by `CompileDoctrine`) and
+sample. The full set is 3MB; the sample is 312KB.
+
+### What the database can and cannot validate
+
+It stores doctrines, rule-set *names*, and per-rule firing counts — **not game
+states**. So conditions cannot be replayed against real play, and the
+differential corpus stays synthetic. Capturing states would need a change to the
+sidecar, and is the same recording shadow mode wants.
+
+What it does give, beyond the doctrine distribution:
+
+- **Empirical ground truth for "never fires".** Across 64 games, 117 distinct
+  rules were compiled and 96 ever fired. Seven of the 21 that never fired were
+  compiled into *every one* of the 4,876 rule sets — `rebuild-refinery`,
+  `rebuild-war-factory`, `rebuild-iron-curtain`, `rebuild-kennel`,
+  `rebuild-missile-silo`, and the two naval squad rules. That is a falsifiable
+  check on `check_shadowed_rules`: a rule it calls unreachable that appears in
+  `rule_firings` is a checker bug.
+- **A porting order.** 86 of 117 rules cover 95% of appearances.
+
+## Recording real games
+
+Generated game states cannot realistically produce accumulated intel, formed
+squads or threat fields, so the predicates reading them are barely exercised by
+the offline corpus. The sidecar can record real ones:
+
+```bash
+vimy-core -export-states ~/vimy-export.json -export-every 200
+```
+
+Off unless a path is given. Sampled because projecting a state costs about 1ms
+against 17µs to evaluate the seed rules — 60x — so recording every evaluation
+would be the dominant cost of a tick. `-export-max` caps the file.
+
+The format matches `differential.json`: states stored once and referenced by
+index, one case per rule with `fired` or `skipped`. Skipped rules are recorded
+too; see `docs/design.md` for why.
+
+`project()` lives in `rules/project.go` rather than in a test, because the
+offline dump and the live exporter both need it and two implementations would
+drift into differential failures that are not bugs.

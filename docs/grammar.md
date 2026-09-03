@@ -19,7 +19,11 @@
 
 <priority>       ::= "priority" <integer>
 <category>       ::= "category" <name> [ "exclusive" ]
-<do>             ::= "do" <name>
+; An action takes arguments when it is built by a factory —
+; `form-squad(ground-attack, Ground, 8, Attack)`. Whether a given action takes
+; any is settled by the type checker, not here.
+<do>             ::= "do" <action>
+<action>         ::= <name> [ "(" [ <arg-list> ] ")" ]
 <because>        ::= "because" <string>
 
 ; A binding may not shadow a predicate name.
@@ -36,6 +40,8 @@
 
 <and-expr>       ::= <cmp-expr> ( "and" <cmp-expr> )*
 
+; One level, so `a < b < c` parses. The type checker rejects it: ordering
+; requires numbers where equality does not.
 <cmp-expr>       ::= <add-expr> ( <cmp-op> <add-expr> )*
 
 <add-expr>       ::= <mul-expr> ( <add-op> <mul-expr> )*
@@ -94,3 +100,23 @@
 
 ; Whitespace separates tokens and is otherwise insignificant.
 ```
+
+## Keeping this current
+
+The grammar is hand-written, so nothing enforces that it matches `parser.rs`.
+Changes that belong here:
+
+- a new keyword, which also means a new `TokenKind::keyword` entry
+- a new token, operator or precedence level
+- a change to what a construct may contain — `do` gaining arguments was one
+
+`rules/grammar.vy` exercises every production, and
+`the_documented_grammar_parses_and_checks` keeps it honest: if a construct stops
+parsing or stops type checking, the file or the parser has drifted. It cannot
+catch a production the grammar describes and the parser never had, so adding a
+shape here means adding it there too.
+
+Changes that do **not** belong here, because they are about meaning rather than
+shape: the predicate and action tables, which domains exist, what types an
+operator accepts. `a < b < c` parses and is then rejected; that rejection is
+`docs/design.md`'s business.

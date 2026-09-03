@@ -25,7 +25,7 @@ pub struct Rule {
     /// A modifier on `category`; absent means false.
     pub exclusive: bool,
     /// The action to run. Exactly one per rule.
-    pub action: Name,
+    pub action: Action,
     /// Why the rule exists. The language has no comments; unlike one, this
     /// survives into an archived rule set.
     pub because: Option<String>,
@@ -33,6 +33,18 @@ pub struct Rule {
     pub lets: Vec<Let>,
     /// Implicitly ANDed.
     pub requires: Vec<Expr>,
+    pub span: Span,
+}
+
+/// What `do` names.
+///
+/// Arguments because eleven actions are built by a factory —
+/// `form-squad(ground-attack, Ground, 8, Attack)` — and their arguments vary per
+/// doctrine, so they cannot be fixed ids. `args` is empty for the rest.
+#[derive(Debug)]
+pub struct Action {
+    pub name: Name,
+    pub args: Vec<Expr>,
     pub span: Span,
 }
 

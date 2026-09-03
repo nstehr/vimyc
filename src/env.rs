@@ -17,20 +17,70 @@ use crate::types::{Domain, ParamType, Type};
 /// finally names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Predicate {
-    Cash,
-    PowerExcess,
+    AircraftCapacity,
+    AxisBurned,
     BaseUnderAttack,
-    EnemiesVisible,
-    HasEnemyIntel,
-    HasUnit,
-    HasBuilding,
-    HasRole,
-    CanBuildRole,
-    QueueBusy,
-    QueueReady,
+    BestAirTarget,
+    BestGroundTarget,
+    BuildingCount,
     CanBuild,
-    SquadReadyRatio,
+    CanBuildAnyCombatAircraft,
+    CanBuildAnyCombatVehicle,
+    CanBuildAnySpecialist,
+    CanBuildRole,
+    CanBuildTransport,
+    CapturableCount,
+    Cash,
+    CombatAircraftCount,
+    CombatVehicleCount,
+    CriticalBuildingUnderAttack,
+    DamagedBuildings,
+    DamagedCombatUnits,
+    EnemiesVisible,
+    EngineerNearCapturable,
+    HarvestersInDanger,
+    HasBuilding,
+    HasEnemyIntel,
+    HasRetreatingUnits,
+    HasRole,
+    HasScout,
+    HasUnit,
+    IdleCombatAircraft,
+    IdleCombatInfantry,
+    IdleCombatLoadedApcs,
+    IdleEmptyApcs,
+    IdleEngineerLoadedApcs,
+    IdleEngineers,
+    IdleGroundUnits,
+    IdleHarvesters,
+    IdleMinelayers,
+    IdleNavalUnits,
+    IdleScouts,
+    IsRushed,
+    LostRole,
+    MapHasWater,
+    NearBaseGroundUnits,
     NearestEnemy,
+    OverextendedSquadMembers,
+    PowerExcess,
+    QueueBusy,
+    QueueProducingRole,
+    QueueReady,
+    ResourcesNearCap,
+    RoleCount,
+    SpecialistInfantryCount,
+    SquadAwayFromBase,
+    SquadExists,
+    SquadIdleCount,
+    SquadNeedsReinforcement,
+    SquadReadyRatio,
+    SquadThreatRatio,
+    SupportPowerReady,
+    TransportCount,
+    UnassignedIdleAir,
+    UnassignedIdleGround,
+    UnassignedIdleNaval,
+    UnitCount,
 }
 
 /// Not a `Signature`: `count` is overloaded across three domains and resolved by
@@ -43,11 +93,6 @@ pub struct Signature {
     pub name: &'static str,
     pub params: &'static [ParamType],
     pub ret: Type,
-}
-
-/// Where a predicate returning a collection lowers to `len(...)`.
-pub struct CollectionDef {
-    pub name: &'static str,
 }
 
 /// A member of an enum domain.
@@ -69,16 +114,16 @@ pub const BUILDABLE: &[Domain] = &[Domain::BuildingType, Domain::UnitType];
 /// resolved by its argument, so it cannot be a row here.
 pub const PREDICATES: &[Signature] = &[
     Signature {
-        id: Predicate::Cash,
-        name: "cash",
+        id: Predicate::AircraftCapacity,
+        name: "aircraft-capacity",
         params: &[],
         ret: Type::Int,
     },
     Signature {
-        id: Predicate::PowerExcess,
-        name: "power-excess",
-        params: &[],
-        ret: Type::Int,
+        id: Predicate::AxisBurned,
+        name: "axis-burned",
+        params: &[ParamType::Exact(Type::Enum(Domain::Axis))],
+        ret: Type::Bool,
     },
     Signature {
         id: Predicate::BaseUnderAttack,
@@ -87,55 +132,23 @@ pub const PREDICATES: &[Signature] = &[
         ret: Type::Bool,
     },
     Signature {
-        id: Predicate::EnemiesVisible,
-        name: "enemies-visible",
+        id: Predicate::BestAirTarget,
+        name: "best-air-target",
         params: &[],
-        ret: Type::Bool,
+        ret: Type::Option(&Type::Enemy),
     },
     Signature {
-        id: Predicate::HasEnemyIntel,
-        name: "has-enemy-intel",
+        id: Predicate::BestGroundTarget,
+        name: "best-ground-target",
         params: &[],
-        ret: Type::Bool,
+        ret: Type::Option(&Type::Enemy),
     },
     Signature {
-        id: Predicate::HasUnit,
-        name: "has-unit",
-        params: &[ParamType::Exact(Type::Enum(Domain::UnitType))],
-        ret: Type::Bool,
-    },
-    Signature {
-        id: Predicate::HasBuilding,
-        name: "has-building",
+        id: Predicate::BuildingCount,
+        name: "building-count",
         params: &[ParamType::Exact(Type::Enum(Domain::BuildingType))],
-        ret: Type::Bool,
+        ret: Type::Int,
     },
-    Signature {
-        id: Predicate::HasRole,
-        name: "has-role",
-        params: &[ParamType::Exact(Type::Enum(Domain::Role))],
-        ret: Type::Bool,
-    },
-    Signature {
-        id: Predicate::CanBuildRole,
-        name: "can-build-role",
-        params: &[ParamType::Exact(Type::Enum(Domain::Role))],
-        ret: Type::Bool,
-    },
-    Signature {
-        id: Predicate::QueueBusy,
-        name: "queue-busy",
-        params: &[ParamType::Exact(Type::Enum(Domain::Queue))],
-        ret: Type::Bool,
-    },
-    Signature {
-        id: Predicate::QueueReady,
-        name: "queue-ready",
-        params: &[ParamType::Exact(Type::Enum(Domain::Queue))],
-        ret: Type::Bool,
-    },
-    // A building or a unit depending on the queue: Go's
-    // `CanBuild("Infantry", "e1")` is as real as `CanBuild("Building", "powr")`.
     Signature {
         id: Predicate::CanBuild,
         name: "can-build",
@@ -146,10 +159,220 @@ pub const PREDICATES: &[Signature] = &[
         ret: Type::Bool,
     },
     Signature {
-        id: Predicate::SquadReadyRatio,
-        name: "squad-ready-ratio",
-        params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
-        ret: Type::Float,
+        id: Predicate::CanBuildAnyCombatAircraft,
+        name: "can-build-any-combat-aircraft",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::CanBuildAnyCombatVehicle,
+        name: "can-build-any-combat-vehicle",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::CanBuildAnySpecialist,
+        name: "can-build-any-specialist",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::CanBuildRole,
+        name: "can-build-role",
+        params: &[ParamType::Exact(Type::Enum(Domain::Role))],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::CanBuildTransport,
+        name: "can-build-transport",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::CapturableCount,
+        name: "capturable-count",
+        params: &[],
+        ret: Type::Int,
+    },
+    Signature {
+        id: Predicate::Cash,
+        name: "cash",
+        params: &[],
+        ret: Type::Int,
+    },
+    Signature {
+        id: Predicate::CombatAircraftCount,
+        name: "combat-aircraft-count",
+        params: &[],
+        ret: Type::Int,
+    },
+    Signature {
+        id: Predicate::CombatVehicleCount,
+        name: "combat-vehicle-count",
+        params: &[],
+        ret: Type::Int,
+    },
+    Signature {
+        id: Predicate::CriticalBuildingUnderAttack,
+        name: "critical-building-under-attack",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::DamagedBuildings,
+        name: "damaged-buildings",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::DamagedCombatUnits,
+        name: "damaged-combat-units",
+        params: &[ParamType::Exact(Type::Float)],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::EnemiesVisible,
+        name: "enemies-visible",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::EngineerNearCapturable,
+        name: "engineer-near-capturable",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::HarvestersInDanger,
+        name: "harvesters-in-danger",
+        params: &[ParamType::Exact(Type::Float)],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::HasBuilding,
+        name: "has-building",
+        params: &[ParamType::Exact(Type::Enum(Domain::BuildingType))],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::HasEnemyIntel,
+        name: "has-enemy-intel",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::HasRetreatingUnits,
+        name: "has-retreating-units",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::HasRole,
+        name: "has-role",
+        params: &[ParamType::Exact(Type::Enum(Domain::Role))],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::HasScout,
+        name: "has-scout",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::HasUnit,
+        name: "has-unit",
+        params: &[ParamType::Exact(Type::Enum(Domain::UnitType))],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::IdleCombatAircraft,
+        name: "idle-combat-aircraft",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::IdleCombatInfantry,
+        name: "idle-combat-infantry",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::IdleCombatLoadedApcs,
+        name: "idle-combat-loaded-apcs",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::IdleEmptyApcs,
+        name: "idle-empty-apcs",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::IdleEngineerLoadedApcs,
+        name: "idle-engineer-loaded-apcs",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::IdleEngineers,
+        name: "idle-engineers",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::IdleGroundUnits,
+        name: "idle-ground-units",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::IdleHarvesters,
+        name: "idle-harvesters",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::IdleMinelayers,
+        name: "idle-minelayers",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::IdleNavalUnits,
+        name: "idle-naval-units",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::IdleScouts,
+        name: "idle-scouts",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::IsRushed,
+        name: "is-rushed",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::LostRole,
+        name: "lost-role",
+        params: &[ParamType::Exact(Type::Enum(Domain::Role))],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::MapHasWater,
+        name: "map-has-water",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::NearBaseGroundUnits,
+        name: "near-base-ground-units",
+        params: &[],
+        ret: Type::Collection,
     },
     Signature {
         id: Predicate::NearestEnemy,
@@ -157,19 +380,134 @@ pub const PREDICATES: &[Signature] = &[
         params: &[],
         ret: Type::Option(&Type::Enemy),
     },
-];
-
-/// Only reachable through `count(...)`, which is why the language needs no list
-/// type — see `docs/design.md`.
-pub const COLLECTIONS: &[CollectionDef] = &[
-    CollectionDef {
-        name: "idle-ground-units",
+    Signature {
+        id: Predicate::OverextendedSquadMembers,
+        name: "overextended-squad-members",
+        params: &[
+            ParamType::Exact(Type::Enum(Domain::SquadName)),
+            ParamType::Exact(Type::Float),
+        ],
+        ret: Type::Collection,
     },
-    CollectionDef {
-        name: "idle-harvesters",
+    Signature {
+        id: Predicate::PowerExcess,
+        name: "power-excess",
+        params: &[],
+        ret: Type::Int,
     },
-    CollectionDef {
-        name: "damaged-buildings",
+    Signature {
+        id: Predicate::QueueBusy,
+        name: "queue-busy",
+        params: &[ParamType::Exact(Type::Enum(Domain::Queue))],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::QueueProducingRole,
+        name: "queue-producing-role",
+        params: &[ParamType::Exact(Type::Enum(Domain::Role))],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::QueueReady,
+        name: "queue-ready",
+        params: &[ParamType::Exact(Type::Enum(Domain::Queue))],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::ResourcesNearCap,
+        name: "resources-near-cap",
+        params: &[],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::RoleCount,
+        name: "role-count",
+        params: &[ParamType::Exact(Type::Enum(Domain::Role))],
+        ret: Type::Int,
+    },
+    Signature {
+        id: Predicate::SpecialistInfantryCount,
+        name: "specialist-infantry-count",
+        params: &[],
+        ret: Type::Int,
+    },
+    Signature {
+        id: Predicate::SquadAwayFromBase,
+        name: "squad-away-from-base",
+        params: &[
+            ParamType::Exact(Type::Enum(Domain::SquadName)),
+            ParamType::Exact(Type::Float),
+        ],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::SquadExists,
+        name: "squad-exists",
+        params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::SquadIdleCount,
+        name: "squad-idle-count",
+        params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
+        ret: Type::Int,
+    },
+    Signature {
+        id: Predicate::SquadNeedsReinforcement,
+        name: "squad-needs-reinforcement",
+        params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::SquadReadyRatio,
+        name: "squad-ready-ratio",
+        params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
+        ret: Type::Float,
+    },
+    Signature {
+        id: Predicate::SquadThreatRatio,
+        name: "squad-threat-ratio",
+        params: &[
+            ParamType::Exact(Type::Enum(Domain::SquadName)),
+            ParamType::Exact(Type::Float),
+        ],
+        ret: Type::Float,
+    },
+    Signature {
+        id: Predicate::SupportPowerReady,
+        name: "support-power-ready",
+        params: &[ParamType::Exact(Type::Enum(Domain::SupportPower))],
+        ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::TransportCount,
+        name: "transport-count",
+        params: &[],
+        ret: Type::Int,
+    },
+    Signature {
+        id: Predicate::UnassignedIdleAir,
+        name: "unassigned-idle-air",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::UnassignedIdleGround,
+        name: "unassigned-idle-ground",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::UnassignedIdleNaval,
+        name: "unassigned-idle-naval",
+        params: &[],
+        ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::UnitCount,
+        name: "unit-count",
+        params: &[ParamType::Exact(Type::Enum(Domain::UnitType))],
+        ret: Type::Int,
     },
 ];
 
@@ -210,6 +548,40 @@ pub const SQUAD_NAMES: &[Member] = &[
 ];
 
 /// From `roles.go`. Kebab in source, snake on the wire.
+pub const AXES: &[Member] = &[
+    Member { name: "air" },
+    Member { name: "infantry" },
+    Member { name: "naval" },
+    Member { name: "vehicle" },
+];
+
+/// OpenRA order names, not kebab — these are engine identifiers.
+pub const SUPPORT_POWERS: &[Member] = &[
+    Member {
+        name: "GrantExternalConditionPowerInfoOrder",
+    },
+    Member {
+        name: "NukePowerInfoOrder",
+    },
+    Member {
+        name: "SovietParatroopers",
+    },
+    Member {
+        name: "SovietSpyPlane",
+    },
+    Member {
+        name: "UkraineParabombs",
+    },
+];
+
+pub const SQUAD_DOMAINS: &[Member] = &[
+    Member { name: "Ground" },
+    Member { name: "Air" },
+    Member { name: "Naval" },
+];
+
+pub const SQUAD_ROLES: &[Member] = &[Member { name: "Attack" }, Member { name: "Defend" }];
+
 pub const ROLES: &[Member] = &[
     Member { name: "aa-defense" },
     Member {
@@ -297,6 +669,9 @@ pub const ROLES: &[Member] = &[
     Member { name: "tran" },
     Member { name: "turret" },
     Member {
+        name: "v2-launcher",
+    },
+    Member {
         name: "war-factory",
     },
 ];
@@ -307,10 +682,6 @@ pub fn predicate(name: &str) -> Option<&'static Signature> {
     PREDICATES.iter().find(|s| s.name == name)
 }
 
-pub fn collection(name: &str) -> Option<&'static CollectionDef> {
-    COLLECTIONS.iter().find(|c| c.name == name)
-}
-
 pub fn members(domain: Domain) -> &'static [Member] {
     match domain {
         Domain::Queue => QUEUES,
@@ -318,6 +689,10 @@ pub fn members(domain: Domain) -> &'static [Member] {
         Domain::BuildingType => BUILDING_TYPES,
         Domain::UnitType => UNIT_TYPES,
         Domain::SquadName => SQUAD_NAMES,
+        Domain::Axis => AXES,
+        Domain::SupportPower => SUPPORT_POWERS,
+        Domain::SquadDomain => SQUAD_DOMAINS,
+        Domain::SquadRole => SQUAD_ROLES,
     }
 }
 
@@ -334,6 +709,10 @@ pub fn domains_containing(name: &str) -> Vec<Domain> {
         Domain::BuildingType,
         Domain::UnitType,
         Domain::SquadName,
+        Domain::Axis,
+        Domain::SupportPower,
+        Domain::SquadDomain,
+        Domain::SquadRole,
     ];
     ALL.iter()
         .copied()
@@ -414,8 +793,11 @@ pub const ACTIONS: &[&str] = &[
     "air-defend-base",
     "attack-known-base-ground",
     "attack-move-ground",
+    "cancel-stuck-aircraft",
     "capture-building",
     "defend-base",
+    "defend-critical-building",
+    "deliver-assault-apc",
     "deploy-mcv",
     "emergency-defend-base",
     "fire-iron-curtain",
@@ -424,7 +806,10 @@ pub const ACTIONS: &[&str] = &[
     "fire-paratroopers",
     "fire-spy-plane",
     "lay-mines",
+    "load-combat-infantry",
+    "load-engineer-into-apc",
     "naval-attack-enemy",
+    "naval-defend-base",
     "place-building",
     "place-defense",
     "produce-aa-defense",
@@ -433,12 +818,17 @@ pub const ACTIONS: &[&str] = &[
     "produce-advanced-ship",
     "produce-aircraft",
     "produce-airfield",
+    "produce-apc",
     "produce-attack-dog",
     "produce-barracks",
+    "produce-basic-aircraft",
     "produce-defense",
     "produce-engineer",
+    "produce-flak-truck",
     "produce-flame-tower",
+    "produce-gap-generator",
     "produce-grenadier",
+    "produce-gunboat",
     "produce-harvester",
     "produce-heavy-vehicle",
     "produce-infantry",
@@ -454,8 +844,10 @@ pub const ACTIONS: &[&str] = &[
     "produce-radar",
     "produce-refinery",
     "produce-rocket-soldier",
+    "produce-scout-vehicle",
     "produce-service-depot",
     "produce-ship",
+    "produce-siege-vehicle",
     "produce-specialist-infantry",
     "produce-spy",
     "produce-tech-center",
@@ -464,7 +856,10 @@ pub const ACTIONS: &[&str] = &[
     "produce-war-factory",
     "repair-buildings",
     "scout",
+    "scout-patrol",
     "send-harvesters",
+    "unblock-war-factory-egress",
+    "unload-apc-near-target",
 ];
 
 pub fn is_category(name: &str) -> bool {
@@ -472,7 +867,79 @@ pub fn is_category(name: &str) -> bool {
 }
 
 pub fn is_action(name: &str) -> bool {
-    ACTIONS.contains(&name)
+    ACTIONS.contains(&name) || action_signature(name).is_some()
+}
+
+/// An action built by a factory, so it carries arguments.
+///
+/// `form-squad(ground-attack, Ground, 8, Attack)` cannot be a fixed id the way
+/// `scout` can — the arguments vary per doctrine, so a registry entry per
+/// parameterisation is not possible. Eleven factories, from `actions.go`.
+pub struct ActionSignature {
+    pub name: &'static str,
+    pub params: &'static [ParamType],
+}
+
+pub const ACTION_SIGNATURES: &[ActionSignature] = &[
+    ActionSignature {
+        name: "form-squad",
+        params: &[
+            ParamType::Exact(Type::Enum(Domain::SquadName)),
+            ParamType::Exact(Type::Enum(Domain::SquadDomain)),
+            ParamType::Exact(Type::Int),
+            ParamType::Exact(Type::Enum(Domain::SquadRole)),
+        ],
+    },
+    ActionSignature {
+        name: "squad-attack-move",
+        params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
+    },
+    ActionSignature {
+        name: "squad-attack-known-base",
+        params: &[
+            ParamType::Exact(Type::Enum(Domain::SquadName)),
+            ParamType::Exact(Type::Float),
+        ],
+    },
+    ActionSignature {
+        name: "squad-air-strike",
+        params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
+    },
+    ActionSignature {
+        name: "squad-focus-fire",
+        params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
+    },
+    ActionSignature {
+        name: "squad-disengage",
+        params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
+    },
+    ActionSignature {
+        name: "squad-defend",
+        params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
+    },
+    ActionSignature {
+        name: "recall-overextended",
+        params: &[
+            ParamType::Exact(Type::Enum(Domain::SquadName)),
+            ParamType::Exact(Type::Float),
+        ],
+    },
+    ActionSignature {
+        name: "retreat-damaged-units",
+        params: &[ParamType::Exact(Type::Float)],
+    },
+    ActionSignature {
+        name: "flee-harvesters",
+        params: &[ParamType::Exact(Type::Float)],
+    },
+    ActionSignature {
+        name: "clear-healed-units",
+        params: &[ParamType::Exact(Type::Float)],
+    },
+];
+
+pub fn action_signature(name: &str) -> Option<&'static ActionSignature> {
+    ACTION_SIGNATURES.iter().find(|a| a.name == name)
 }
 
 #[cfg(test)]

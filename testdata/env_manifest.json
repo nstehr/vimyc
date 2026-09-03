@@ -1,0 +1,2128 @@
+[
+  {
+    "name": "AirApproachWaypoint",
+    "kebab": "air-approach-waypoint",
+    "params": [
+      {
+        "name": "",
+        "type": "int"
+      },
+      {
+        "name": "",
+        "type": "int"
+      }
+    ],
+    "results": [
+      "int",
+      "int",
+      "bool"
+    ],
+    "domains": [
+      "",
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "air-approach-waypoint"
+    ],
+    "literals": [
+      [],
+      []
+    ]
+  },
+  {
+    "name": "AirThreatField",
+    "kebab": "air-threat-field",
+    "params": null,
+    "results": [
+      "*model.ThreatField"
+    ],
+    "used": false,
+    "keys": [
+      "air-threat-field"
+    ]
+  },
+  {
+    "name": "AircraftCapacity",
+    "kebab": "aircraft-capacity",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": true,
+    "keys": [
+      "aircraft-capacity"
+    ]
+  },
+  {
+    "name": "Airfield",
+    "kebab": "airfield",
+    "params": null,
+    "results": [
+      "*model.Building"
+    ],
+    "used": false,
+    "keys": [
+      "airfield"
+    ]
+  },
+  {
+    "name": "ApproachWaypoint",
+    "kebab": "approach-waypoint",
+    "params": [
+      {
+        "name": "",
+        "type": "int"
+      },
+      {
+        "name": "",
+        "type": "int"
+      }
+    ],
+    "results": [
+      "int",
+      "int",
+      "bool"
+    ],
+    "domains": [
+      "",
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "approach-waypoint"
+    ],
+    "literals": [
+      [],
+      []
+    ]
+  },
+  {
+    "name": "AxisBurned",
+    "kebab": "axis-burned",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "axis"
+    ],
+    "used": true,
+    "keys": [
+      "axis-burned(air)",
+      "axis-burned(infantry)",
+      "axis-burned(naval)",
+      "axis-burned(vehicle)"
+    ],
+    "literals": [
+      [
+        "air",
+        "infantry",
+        "naval",
+        "vehicle"
+      ]
+    ]
+  },
+  {
+    "name": "BaseUnderAttack",
+    "kebab": "base-under-attack",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "base-under-attack"
+    ]
+  },
+  {
+    "name": "BestAirApproachAxis",
+    "kebab": "best-air-approach-axis",
+    "params": [
+      {
+        "name": "",
+        "type": "int"
+      },
+      {
+        "name": "",
+        "type": "int"
+      }
+    ],
+    "results": [
+      "int",
+      "int",
+      "bool"
+    ],
+    "domains": [
+      "",
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "best-air-approach-axis"
+    ],
+    "literals": [
+      [],
+      []
+    ]
+  },
+  {
+    "name": "BestAirTarget",
+    "kebab": "best-air-target",
+    "params": null,
+    "results": [
+      "*model.Enemy"
+    ],
+    "used": true,
+    "keys": [
+      "best-air-target"
+    ]
+  },
+  {
+    "name": "BestApproachAxis",
+    "kebab": "best-approach-axis",
+    "params": [
+      {
+        "name": "",
+        "type": "int"
+      },
+      {
+        "name": "",
+        "type": "int"
+      }
+    ],
+    "results": [
+      "int",
+      "int",
+      "bool"
+    ],
+    "domains": [
+      "",
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "best-approach-axis"
+    ],
+    "literals": [
+      [],
+      []
+    ]
+  },
+  {
+    "name": "BestBuildableAircraft",
+    "kebab": "best-buildable-aircraft",
+    "params": null,
+    "results": [
+      "string"
+    ],
+    "used": false,
+    "keys": [
+      "best-buildable-aircraft"
+    ]
+  },
+  {
+    "name": "BestBuildableNaval",
+    "kebab": "best-buildable-naval",
+    "params": null,
+    "results": [
+      "string"
+    ],
+    "used": false,
+    "keys": [
+      "best-buildable-naval"
+    ]
+  },
+  {
+    "name": "BestBuildableSpecialist",
+    "kebab": "best-buildable-specialist",
+    "params": null,
+    "results": [
+      "string"
+    ],
+    "used": false,
+    "keys": [
+      "best-buildable-specialist"
+    ]
+  },
+  {
+    "name": "BestBuildableVehicle",
+    "kebab": "best-buildable-vehicle",
+    "params": null,
+    "results": [
+      "string"
+    ],
+    "used": false,
+    "keys": [
+      "best-buildable-vehicle"
+    ]
+  },
+  {
+    "name": "BestCapturable",
+    "kebab": "best-capturable",
+    "params": null,
+    "results": [
+      "*model.Enemy"
+    ],
+    "used": false,
+    "keys": [
+      "best-capturable"
+    ]
+  },
+  {
+    "name": "BestGroundTarget",
+    "kebab": "best-ground-target",
+    "params": null,
+    "results": [
+      "*model.Enemy"
+    ],
+    "used": true,
+    "keys": [
+      "best-ground-target"
+    ]
+  },
+  {
+    "name": "BuildableType",
+    "kebab": "buildable-type",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "string"
+    ],
+    "domains": [
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "buildable-type"
+    ],
+    "literals": [
+      []
+    ]
+  },
+  {
+    "name": "BuildingCentroid",
+    "kebab": "building-centroid",
+    "params": null,
+    "results": [
+      "int",
+      "int"
+    ],
+    "used": false,
+    "keys": [
+      "building-centroid"
+    ]
+  },
+  {
+    "name": "BuildingCount",
+    "kebab": "building-count",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "int"
+    ],
+    "domains": [
+      "building"
+    ],
+    "used": true,
+    "keys": [
+      "building-count(powr)"
+    ],
+    "literals": [
+      [
+        "powr"
+      ]
+    ]
+  },
+  {
+    "name": "CanBuild",
+    "kebab": "can-build",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      },
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "queue",
+      "buildable"
+    ],
+    "used": true,
+    "keys": [
+      "can-build(Building,e1)",
+      "can-build(Building,mcv)",
+      "can-build(Building,powr)",
+      "can-build(Building,proc)",
+      "can-build(Building,weap)",
+      "can-build(Infantry,e1)",
+      "can-build(Infantry,mcv)",
+      "can-build(Infantry,powr)",
+      "can-build(Infantry,proc)",
+      "can-build(Infantry,weap)",
+      "can-build(Vehicle,e1)",
+      "can-build(Vehicle,mcv)",
+      "can-build(Vehicle,powr)",
+      "can-build(Vehicle,proc)",
+      "can-build(Vehicle,weap)"
+    ],
+    "literals": [
+      [
+        "Building",
+        "Infantry",
+        "Vehicle"
+      ],
+      [
+        "e1",
+        "mcv",
+        "powr",
+        "proc",
+        "weap"
+      ]
+    ]
+  },
+  {
+    "name": "CanBuildAnyCombatAircraft",
+    "kebab": "can-build-any-combat-aircraft",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "can-build-any-combat-aircraft"
+    ]
+  },
+  {
+    "name": "CanBuildAnyCombatVehicle",
+    "kebab": "can-build-any-combat-vehicle",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "can-build-any-combat-vehicle"
+    ]
+  },
+  {
+    "name": "CanBuildAnySpecialist",
+    "kebab": "can-build-any-specialist",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "can-build-any-specialist"
+    ]
+  },
+  {
+    "name": "CanBuildRole",
+    "kebab": "can-build-role",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "role"
+    ],
+    "used": true,
+    "keys": [
+      "can-build-role(aa-defense)",
+      "can-build-role(advanced-aircraft)",
+      "can-build-role(advanced-power)",
+      "can-build-role(airfield)",
+      "can-build-role(artillery)",
+      "can-build-role(attack-dog)",
+      "can-build-role(barracks)",
+      "can-build-role(basic-aircraft)",
+      "can-build-role(camo-pillbox)",
+      "can-build-role(cruiser)",
+      "can-build-role(destroyer)",
+      "can-build-role(engineer)",
+      "can-build-role(flak-truck)",
+      "can-build-role(flame-tower)",
+      "can-build-role(gap-generator)",
+      "can-build-role(grenadier)",
+      "can-build-role(gunboat)",
+      "can-build-role(harvester)",
+      "can-build-role(heavy-tank)",
+      "can-build-role(iron-curtain)",
+      "can-build-role(kennel)",
+      "can-build-role(light-tank)",
+      "can-build-role(mad-tank)",
+      "can-build-role(medium-tank)",
+      "can-build-role(minelayer)",
+      "can-build-role(missile-silo)",
+      "can-build-role(missile-sub)",
+      "can-build-role(naval-yard)",
+      "can-build-role(ore-silo)",
+      "can-build-role(pillbox)",
+      "can-build-role(power-plant)",
+      "can-build-role(radar)",
+      "can-build-role(ranger)",
+      "can-build-role(refinery)",
+      "can-build-role(rocket-soldier)",
+      "can-build-role(service-depot)",
+      "can-build-role(spy)",
+      "can-build-role(submarine)",
+      "can-build-role(tech-center)",
+      "can-build-role(tesla-coil)",
+      "can-build-role(turret)",
+      "can-build-role(v2-launcher)",
+      "can-build-role(war-factory)"
+    ],
+    "literals": [
+      [
+        "aa-defense",
+        "advanced-aircraft",
+        "advanced-power",
+        "airfield",
+        "artillery",
+        "attack-dog",
+        "barracks",
+        "basic-aircraft",
+        "camo-pillbox",
+        "cruiser",
+        "destroyer",
+        "engineer",
+        "flak-truck",
+        "flame-tower",
+        "gap-generator",
+        "grenadier",
+        "gunboat",
+        "harvester",
+        "heavy-tank",
+        "iron-curtain",
+        "kennel",
+        "light-tank",
+        "mad-tank",
+        "medium-tank",
+        "minelayer",
+        "missile-silo",
+        "missile-sub",
+        "naval-yard",
+        "ore-silo",
+        "pillbox",
+        "power-plant",
+        "radar",
+        "ranger",
+        "refinery",
+        "rocket-soldier",
+        "service-depot",
+        "spy",
+        "submarine",
+        "tech-center",
+        "tesla-coil",
+        "turret",
+        "v2-launcher",
+        "war-factory"
+      ]
+    ]
+  },
+  {
+    "name": "CanBuildTransport",
+    "kebab": "can-build-transport",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "can-build-transport"
+    ]
+  },
+  {
+    "name": "CapturableCount",
+    "kebab": "capturable-count",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": true,
+    "keys": [
+      "capturable-count"
+    ]
+  },
+  {
+    "name": "Cash",
+    "kebab": "cash",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": true,
+    "keys": [
+      "cash"
+    ]
+  },
+  {
+    "name": "ChokepointsTowardEnemy",
+    "kebab": "chokepoints-toward-enemy",
+    "params": null,
+    "results": [
+      "[]model.Chokepoint"
+    ],
+    "used": false,
+    "keys": [
+      "chokepoints-toward-enemy"
+    ]
+  },
+  {
+    "name": "CombatAircraftCount",
+    "kebab": "combat-aircraft-count",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": true,
+    "keys": [
+      "combat-aircraft-count"
+    ]
+  },
+  {
+    "name": "CombatVehicleCount",
+    "kebab": "combat-vehicle-count",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": true,
+    "keys": [
+      "combat-vehicle-count"
+    ]
+  },
+  {
+    "name": "CriticalBuildingUnderAttack",
+    "kebab": "critical-building-under-attack",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "critical-building-under-attack"
+    ]
+  },
+  {
+    "name": "DamagedBuildings",
+    "kebab": "damaged-buildings",
+    "params": null,
+    "results": [
+      "[]model.Building"
+    ],
+    "used": true,
+    "keys": [
+      "damaged-buildings"
+    ]
+  },
+  {
+    "name": "DamagedCombatUnits",
+    "kebab": "damaged-combat-units",
+    "params": [
+      {
+        "name": "",
+        "type": "float64"
+      }
+    ],
+    "results": [
+      "[]model.Unit"
+    ],
+    "domains": [
+      ""
+    ],
+    "used": true,
+    "keys": [
+      "damaged-combat-units(0.17)",
+      "damaged-combat-units(0.18)",
+      "damaged-combat-units(0.19)",
+      "damaged-combat-units(0.2)",
+      "damaged-combat-units(0.22)",
+      "damaged-combat-units(0.23)",
+      "damaged-combat-units(0.24)",
+      "damaged-combat-units(0.25)",
+      "damaged-combat-units(0.26)",
+      "damaged-combat-units(0.27)",
+      "damaged-combat-units(0.29)",
+      "damaged-combat-units(0.31)",
+      "damaged-combat-units(0.33)",
+      "damaged-combat-units(0.34)",
+      "damaged-combat-units(0.36)",
+      "damaged-combat-units(0.41)",
+      "damaged-combat-units(0.43)",
+      "damaged-combat-units(0.45)",
+      "damaged-combat-units(0.46)"
+    ],
+    "literals": [
+      [
+        "0.17",
+        "0.18",
+        "0.19",
+        "0.20",
+        "0.22",
+        "0.23",
+        "0.24",
+        "0.25",
+        "0.26",
+        "0.27",
+        "0.29",
+        "0.31",
+        "0.33",
+        "0.34",
+        "0.36",
+        "0.41",
+        "0.43",
+        "0.45",
+        "0.46"
+      ]
+    ]
+  },
+  {
+    "name": "DamagedSquadUnits",
+    "kebab": "damaged-squad-units",
+    "params": [
+      {
+        "name": "",
+        "type": "float64"
+      }
+    ],
+    "results": [
+      "[]model.Unit"
+    ],
+    "domains": [
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "damaged-squad-units"
+    ],
+    "literals": [
+      []
+    ]
+  },
+  {
+    "name": "EnemiesVisible",
+    "kebab": "enemies-visible",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "enemies-visible"
+    ]
+  },
+  {
+    "name": "EnemyBaseCount",
+    "kebab": "enemy-base-count",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": false,
+    "keys": [
+      "enemy-base-count"
+    ]
+  },
+  {
+    "name": "EngineerNearCapturable",
+    "kebab": "engineer-near-capturable",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "engineer-near-capturable"
+    ]
+  },
+  {
+    "name": "GroundUnitCentroid",
+    "kebab": "ground-unit-centroid",
+    "params": null,
+    "results": [
+      "int",
+      "int"
+    ],
+    "used": false,
+    "keys": [
+      "ground-unit-centroid"
+    ]
+  },
+  {
+    "name": "HarvestersInDanger",
+    "kebab": "harvesters-in-danger",
+    "params": [
+      {
+        "name": "",
+        "type": "float64"
+      }
+    ],
+    "results": [
+      "[]model.Unit"
+    ],
+    "domains": [
+      ""
+    ],
+    "used": true,
+    "keys": [
+      "harvesters-in-danger(0.1)",
+      "harvesters-in-danger(0.11)",
+      "harvesters-in-danger(0.12)",
+      "harvesters-in-danger(0.13)",
+      "harvesters-in-danger(0.14)"
+    ],
+    "literals": [
+      [
+        "0.10",
+        "0.11",
+        "0.12",
+        "0.13",
+        "0.14"
+      ]
+    ]
+  },
+  {
+    "name": "HasBuilding",
+    "kebab": "has-building",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "building"
+    ],
+    "used": true,
+    "keys": [
+      "has-building(fact)",
+      "has-building(proc)",
+      "has-building(weap)"
+    ],
+    "literals": [
+      [
+        "fact",
+        "proc",
+        "weap"
+      ]
+    ]
+  },
+  {
+    "name": "HasEnemyIntel",
+    "kebab": "has-enemy-intel",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "has-enemy-intel"
+    ]
+  },
+  {
+    "name": "HasRetreatingUnits",
+    "kebab": "has-retreating-units",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "has-retreating-units"
+    ]
+  },
+  {
+    "name": "HasRole",
+    "kebab": "has-role",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "role"
+    ],
+    "used": true,
+    "keys": [
+      "has-role(airfield)",
+      "has-role(barracks)",
+      "has-role(construction-yard)",
+      "has-role(flame-tower)",
+      "has-role(iron-curtain)",
+      "has-role(kennel)",
+      "has-role(missile-silo)",
+      "has-role(naval-yard)",
+      "has-role(radar)",
+      "has-role(ranger)",
+      "has-role(refinery)",
+      "has-role(service-depot)",
+      "has-role(tech-center)",
+      "has-role(tesla-coil)",
+      "has-role(war-factory)"
+    ],
+    "literals": [
+      [
+        "airfield",
+        "barracks",
+        "construction-yard",
+        "flame-tower",
+        "iron-curtain",
+        "kennel",
+        "missile-silo",
+        "naval-yard",
+        "radar",
+        "ranger",
+        "refinery",
+        "service-depot",
+        "tech-center",
+        "tesla-coil",
+        "war-factory"
+      ]
+    ]
+  },
+  {
+    "name": "HasScout",
+    "kebab": "has-scout",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "has-scout"
+    ]
+  },
+  {
+    "name": "HasSupportPower",
+    "kebab": "has-support-power",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "has-support-power"
+    ],
+    "literals": [
+      []
+    ]
+  },
+  {
+    "name": "HasUnit",
+    "kebab": "has-unit",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "unit"
+    ],
+    "used": true,
+    "keys": [
+      "has-unit(mcv)"
+    ],
+    "literals": [
+      [
+        "mcv"
+      ]
+    ]
+  },
+  {
+    "name": "IdleAPCs",
+    "kebab": "idle-apcs",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": false,
+    "keys": [
+      "idle-apcs"
+    ]
+  },
+  {
+    "name": "IdleCombatAircraft",
+    "kebab": "idle-combat-aircraft",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "idle-combat-aircraft"
+    ]
+  },
+  {
+    "name": "IdleCombatInfantry",
+    "kebab": "idle-combat-infantry",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "idle-combat-infantry"
+    ]
+  },
+  {
+    "name": "IdleCombatLoadedAPCs",
+    "kebab": "idle-combat-loaded-apcs",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "idle-combat-loaded-apcs"
+    ]
+  },
+  {
+    "name": "IdleEmptyAPCs",
+    "kebab": "idle-empty-apcs",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "idle-empty-apcs"
+    ]
+  },
+  {
+    "name": "IdleEngineerLoadedAPCs",
+    "kebab": "idle-engineer-loaded-apcs",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "idle-engineer-loaded-apcs"
+    ]
+  },
+  {
+    "name": "IdleEngineers",
+    "kebab": "idle-engineers",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "idle-engineers"
+    ]
+  },
+  {
+    "name": "IdleGroundUnits",
+    "kebab": "idle-ground-units",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "idle-ground-units"
+    ]
+  },
+  {
+    "name": "IdleHarvesters",
+    "kebab": "idle-harvesters",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "idle-harvesters"
+    ]
+  },
+  {
+    "name": "IdleLoadedAPCs",
+    "kebab": "idle-loaded-apcs",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": false,
+    "keys": [
+      "idle-loaded-apcs"
+    ]
+  },
+  {
+    "name": "IdleMinelayers",
+    "kebab": "idle-minelayers",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "idle-minelayers"
+    ]
+  },
+  {
+    "name": "IdleNavalUnits",
+    "kebab": "idle-naval-units",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "idle-naval-units"
+    ]
+  },
+  {
+    "name": "IdleRangers",
+    "kebab": "idle-rangers",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": false,
+    "keys": [
+      "idle-rangers"
+    ]
+  },
+  {
+    "name": "IdleScouts",
+    "kebab": "idle-scouts",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "idle-scouts"
+    ]
+  },
+  {
+    "name": "InferredEnemyBaseCenter",
+    "kebab": "inferred-enemy-base-center",
+    "params": null,
+    "results": [
+      "*rules.IntelCenter"
+    ],
+    "used": false,
+    "keys": [
+      "inferred-enemy-base-center"
+    ]
+  },
+  {
+    "name": "IsHarvesterHarassed",
+    "kebab": "is-harvester-harassed",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": false,
+    "keys": [
+      "is-harvester-harassed"
+    ]
+  },
+  {
+    "name": "IsLandAt",
+    "kebab": "is-land-at",
+    "params": [
+      {
+        "name": "",
+        "type": "int"
+      },
+      {
+        "name": "",
+        "type": "int"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "",
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "is-land-at"
+    ],
+    "literals": [
+      [],
+      []
+    ]
+  },
+  {
+    "name": "IsRushed",
+    "kebab": "is-rushed",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "is-rushed"
+    ]
+  },
+  {
+    "name": "IsWaterAt",
+    "kebab": "is-water-at",
+    "params": [
+      {
+        "name": "",
+        "type": "int"
+      },
+      {
+        "name": "",
+        "type": "int"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "",
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "is-water-at"
+    ],
+    "literals": [
+      [],
+      []
+    ]
+  },
+  {
+    "name": "LostRole",
+    "kebab": "lost-role",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "role"
+    ],
+    "used": true,
+    "keys": [
+      "lost-role(advanced-power)",
+      "lost-role(airfield)",
+      "lost-role(barracks)",
+      "lost-role(iron-curtain)",
+      "lost-role(kennel)",
+      "lost-role(missile-silo)",
+      "lost-role(naval-yard)",
+      "lost-role(power-plant)",
+      "lost-role(radar)",
+      "lost-role(refinery)",
+      "lost-role(service-depot)",
+      "lost-role(tech-center)",
+      "lost-role(war-factory)"
+    ],
+    "literals": [
+      [
+        "advanced-power",
+        "airfield",
+        "barracks",
+        "iron-curtain",
+        "kennel",
+        "missile-silo",
+        "naval-yard",
+        "power-plant",
+        "radar",
+        "refinery",
+        "service-depot",
+        "tech-center",
+        "war-factory"
+      ]
+    ]
+  },
+  {
+    "name": "MapHasWater",
+    "kebab": "map-has-water",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "map-has-water"
+    ]
+  },
+  {
+    "name": "MapHeight",
+    "kebab": "map-height",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": false,
+    "keys": [
+      "map-height"
+    ]
+  },
+  {
+    "name": "MapWidth",
+    "kebab": "map-width",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": false,
+    "keys": [
+      "map-width"
+    ]
+  },
+  {
+    "name": "NearBaseGroundUnits",
+    "kebab": "near-base-ground-units",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "near-base-ground-units"
+    ]
+  },
+  {
+    "name": "NearestCapturable",
+    "kebab": "nearest-capturable",
+    "params": null,
+    "results": [
+      "*model.Enemy"
+    ],
+    "used": false,
+    "keys": [
+      "nearest-capturable"
+    ]
+  },
+  {
+    "name": "NearestEnemy",
+    "kebab": "nearest-enemy",
+    "params": null,
+    "results": [
+      "*model.Enemy"
+    ],
+    "used": true,
+    "keys": [
+      "nearest-enemy"
+    ]
+  },
+  {
+    "name": "NearestEnemyBase",
+    "kebab": "nearest-enemy-base",
+    "params": null,
+    "results": [
+      "*rules.EnemyBaseIntel"
+    ],
+    "used": false,
+    "keys": [
+      "nearest-enemy-base"
+    ]
+  },
+  {
+    "name": "OverextendedSquadMembers",
+    "kebab": "overextended-squad-members",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      },
+      {
+        "name": "",
+        "type": "float64"
+      }
+    ],
+    "results": [
+      "[]model.Unit"
+    ],
+    "domains": [
+      "squad",
+      ""
+    ],
+    "used": true,
+    "keys": [
+      "overextended-squad-members(ground-attack,0.28)",
+      "overextended-squad-members(ground-attack,0.29)",
+      "overextended-squad-members(ground-attack,0.3)",
+      "overextended-squad-members(ground-attack,0.31)",
+      "overextended-squad-members(ground-attack,0.35)",
+      "overextended-squad-members(ground-attack,0.36)",
+      "overextended-squad-members(ground-attack,0.37)",
+      "overextended-squad-members(ground-attack,0.38)",
+      "overextended-squad-members(ground-attack,0.39)",
+      "overextended-squad-members(ground-attack,0.4)",
+      "overextended-squad-members(ground-attack,0.41)",
+      "overextended-squad-members(ground-attack,0.42)",
+      "overextended-squad-members(ground-attack,0.43)",
+      "overextended-squad-members(ground-attack,0.44)",
+      "overextended-squad-members(ground-attack,0.45)",
+      "overextended-squad-members(ground-attack,0.46)",
+      "overextended-squad-members(ground-attack,0.47)",
+      "overextended-squad-members(ground-attack,0.48)",
+      "overextended-squad-members(ground-attack,0.49)",
+      "overextended-squad-members(naval-attack,0.28)",
+      "overextended-squad-members(naval-attack,0.29)",
+      "overextended-squad-members(naval-attack,0.3)",
+      "overextended-squad-members(naval-attack,0.31)",
+      "overextended-squad-members(naval-attack,0.35)",
+      "overextended-squad-members(naval-attack,0.36)",
+      "overextended-squad-members(naval-attack,0.37)",
+      "overextended-squad-members(naval-attack,0.38)",
+      "overextended-squad-members(naval-attack,0.39)",
+      "overextended-squad-members(naval-attack,0.4)",
+      "overextended-squad-members(naval-attack,0.41)",
+      "overextended-squad-members(naval-attack,0.42)",
+      "overextended-squad-members(naval-attack,0.43)",
+      "overextended-squad-members(naval-attack,0.44)",
+      "overextended-squad-members(naval-attack,0.45)",
+      "overextended-squad-members(naval-attack,0.46)",
+      "overextended-squad-members(naval-attack,0.47)",
+      "overextended-squad-members(naval-attack,0.48)",
+      "overextended-squad-members(naval-attack,0.49)"
+    ],
+    "literals": [
+      [
+        "ground-attack",
+        "naval-attack"
+      ],
+      [
+        "0.28",
+        "0.29",
+        "0.30",
+        "0.31",
+        "0.35",
+        "0.36",
+        "0.37",
+        "0.38",
+        "0.39",
+        "0.40",
+        "0.41",
+        "0.42",
+        "0.43",
+        "0.44",
+        "0.45",
+        "0.46",
+        "0.47",
+        "0.48",
+        "0.49"
+      ]
+    ]
+  },
+  {
+    "name": "PowerExcess",
+    "kebab": "power-excess",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": true,
+    "keys": [
+      "power-excess"
+    ]
+  },
+  {
+    "name": "QueueBusy",
+    "kebab": "queue-busy",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "queue"
+    ],
+    "used": true,
+    "keys": [
+      "queue-busy(Aircraft)",
+      "queue-busy(Building)",
+      "queue-busy(Defense)",
+      "queue-busy(Infantry)",
+      "queue-busy(Ship)",
+      "queue-busy(Vehicle)"
+    ],
+    "literals": [
+      [
+        "Aircraft",
+        "Building",
+        "Defense",
+        "Infantry",
+        "Ship",
+        "Vehicle"
+      ]
+    ]
+  },
+  {
+    "name": "QueueProducingRole",
+    "kebab": "queue-producing-role",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "role"
+    ],
+    "used": true,
+    "keys": [
+      "queue-producing-role(radar)"
+    ],
+    "literals": [
+      [
+        "radar"
+      ]
+    ]
+  },
+  {
+    "name": "QueueReady",
+    "kebab": "queue-ready",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "queue"
+    ],
+    "used": true,
+    "keys": [
+      "queue-ready(Aircraft)",
+      "queue-ready(Building)",
+      "queue-ready(Defense)",
+      "queue-ready(Vehicle)"
+    ],
+    "literals": [
+      [
+        "Aircraft",
+        "Building",
+        "Defense",
+        "Vehicle"
+      ]
+    ]
+  },
+  {
+    "name": "ResourcesNearCap",
+    "kebab": "resources-near-cap",
+    "params": null,
+    "results": [
+      "bool"
+    ],
+    "used": true,
+    "keys": [
+      "resources-near-cap"
+    ]
+  },
+  {
+    "name": "RoleCount",
+    "kebab": "role-count",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "int"
+    ],
+    "domains": [
+      "role"
+    ],
+    "used": true,
+    "keys": [
+      "role-count(aa-defense)",
+      "role-count(advanced-aircraft)",
+      "role-count(artillery)",
+      "role-count(attack-dog)",
+      "role-count(barracks)",
+      "role-count(basic-aircraft)",
+      "role-count(camo-pillbox)",
+      "role-count(cruiser)",
+      "role-count(destroyer)",
+      "role-count(engineer)",
+      "role-count(flak-truck)",
+      "role-count(flame-tower)",
+      "role-count(gap-generator)",
+      "role-count(grenadier)",
+      "role-count(gunboat)",
+      "role-count(harvester)",
+      "role-count(heavy-tank)",
+      "role-count(mad-tank)",
+      "role-count(medium-tank)",
+      "role-count(minelayer)",
+      "role-count(missile-sub)",
+      "role-count(ore-silo)",
+      "role-count(pillbox)",
+      "role-count(power-plant)",
+      "role-count(refinery)",
+      "role-count(rocket-soldier)",
+      "role-count(spy)",
+      "role-count(submarine)",
+      "role-count(tesla-coil)",
+      "role-count(turret)",
+      "role-count(v2-launcher)",
+      "role-count(war-factory)"
+    ],
+    "literals": [
+      [
+        "aa-defense",
+        "advanced-aircraft",
+        "artillery",
+        "attack-dog",
+        "barracks",
+        "basic-aircraft",
+        "camo-pillbox",
+        "cruiser",
+        "destroyer",
+        "engineer",
+        "flak-truck",
+        "flame-tower",
+        "gap-generator",
+        "grenadier",
+        "gunboat",
+        "harvester",
+        "heavy-tank",
+        "mad-tank",
+        "medium-tank",
+        "minelayer",
+        "missile-sub",
+        "ore-silo",
+        "pillbox",
+        "power-plant",
+        "refinery",
+        "rocket-soldier",
+        "spy",
+        "submarine",
+        "tesla-coil",
+        "turret",
+        "v2-launcher",
+        "war-factory"
+      ]
+    ]
+  },
+  {
+    "name": "ServiceDepot",
+    "kebab": "service-depot",
+    "params": null,
+    "results": [
+      "*model.Building"
+    ],
+    "used": false,
+    "keys": [
+      "service-depot"
+    ]
+  },
+  {
+    "name": "ServiceDepotOrCentroid",
+    "kebab": "service-depot-or-centroid",
+    "params": null,
+    "results": [
+      "int",
+      "int"
+    ],
+    "used": false,
+    "keys": [
+      "service-depot-or-centroid"
+    ]
+  },
+  {
+    "name": "ServiceDepotPos",
+    "kebab": "service-depot-pos",
+    "params": null,
+    "results": [
+      "int",
+      "int",
+      "bool"
+    ],
+    "used": false,
+    "keys": [
+      "service-depot-pos"
+    ]
+  },
+  {
+    "name": "SpecialistInfantryCount",
+    "kebab": "specialist-infantry-count",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": true,
+    "keys": [
+      "specialist-infantry-count"
+    ]
+  },
+  {
+    "name": "SquadAwayFromBase",
+    "kebab": "squad-away-from-base",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      },
+      {
+        "name": "",
+        "type": "float64"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "squad",
+      ""
+    ],
+    "used": true,
+    "keys": [
+      "squad-away-from-base(ground-attack,0.1)",
+      "squad-away-from-base(naval-attack,0.1)"
+    ],
+    "literals": [
+      [
+        "ground-attack",
+        "naval-attack"
+      ],
+      [
+        "0.10"
+      ]
+    ]
+  },
+  {
+    "name": "SquadClumped",
+    "kebab": "squad-clumped",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      },
+      {
+        "name": "",
+        "type": "int"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "",
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "squad-clumped"
+    ],
+    "literals": [
+      [],
+      []
+    ]
+  },
+  {
+    "name": "SquadExists",
+    "kebab": "squad-exists",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "squad"
+    ],
+    "used": true,
+    "keys": [
+      "squad-exists(air-attack)",
+      "squad-exists(ground-attack)",
+      "squad-exists(ground-defense)",
+      "squad-exists(naval-attack)"
+    ],
+    "literals": [
+      [
+        "air-attack",
+        "ground-attack",
+        "ground-defense",
+        "naval-attack"
+      ]
+    ]
+  },
+  {
+    "name": "SquadIdleCount",
+    "kebab": "squad-idle-count",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "int"
+    ],
+    "domains": [
+      "squad"
+    ],
+    "used": true,
+    "keys": [
+      "squad-idle-count(air-attack)",
+      "squad-idle-count(ground-attack)",
+      "squad-idle-count(ground-defense)",
+      "squad-idle-count(naval-attack)"
+    ],
+    "literals": [
+      [
+        "air-attack",
+        "ground-attack",
+        "ground-defense",
+        "naval-attack"
+      ]
+    ]
+  },
+  {
+    "name": "SquadNeedsReinforcement",
+    "kebab": "squad-needs-reinforcement",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "squad"
+    ],
+    "used": true,
+    "keys": [
+      "squad-needs-reinforcement(air-attack)",
+      "squad-needs-reinforcement(ground-attack)",
+      "squad-needs-reinforcement(ground-defense)",
+      "squad-needs-reinforcement(naval-attack)"
+    ],
+    "literals": [
+      [
+        "air-attack",
+        "ground-attack",
+        "ground-defense",
+        "naval-attack"
+      ]
+    ]
+  },
+  {
+    "name": "SquadReadyRatio",
+    "kebab": "squad-ready-ratio",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "float64"
+    ],
+    "domains": [
+      "squad"
+    ],
+    "used": true,
+    "keys": [
+      "squad-ready-ratio(air-attack)",
+      "squad-ready-ratio(ground-attack)",
+      "squad-ready-ratio(naval-attack)"
+    ],
+    "literals": [
+      [
+        "air-attack",
+        "ground-attack",
+        "naval-attack"
+      ]
+    ]
+  },
+  {
+    "name": "SquadSize",
+    "kebab": "squad-size",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "int"
+    ],
+    "domains": [
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "squad-size"
+    ],
+    "literals": [
+      []
+    ]
+  },
+  {
+    "name": "SquadThreatRatio",
+    "kebab": "squad-threat-ratio",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      },
+      {
+        "name": "",
+        "type": "float64"
+      }
+    ],
+    "results": [
+      "float64"
+    ],
+    "domains": [
+      "squad",
+      ""
+    ],
+    "used": true,
+    "keys": [
+      "squad-threat-ratio(ground-attack,0.1)",
+      "squad-threat-ratio(naval-attack,0.1)"
+    ],
+    "literals": [
+      [
+        "ground-attack",
+        "naval-attack"
+      ],
+      [
+        "0.10"
+      ]
+    ]
+  },
+  {
+    "name": "SupportPowerReady",
+    "kebab": "support-power-ready",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "bool"
+    ],
+    "domains": [
+      "support-power"
+    ],
+    "used": true,
+    "keys": [
+      "support-power-ready(GrantExternalConditionPowerInfoOrder)",
+      "support-power-ready(NukePowerInfoOrder)",
+      "support-power-ready(SovietParatroopers)",
+      "support-power-ready(SovietSpyPlane)",
+      "support-power-ready(UkraineParabombs)"
+    ],
+    "literals": [
+      [
+        "GrantExternalConditionPowerInfoOrder",
+        "NukePowerInfoOrder",
+        "SovietParatroopers",
+        "SovietSpyPlane",
+        "UkraineParabombs"
+      ]
+    ]
+  },
+  {
+    "name": "TerrainAt",
+    "kebab": "terrain-at",
+    "params": [
+      {
+        "name": "",
+        "type": "int"
+      },
+      {
+        "name": "",
+        "type": "int"
+      }
+    ],
+    "results": [
+      "model.TerrainType"
+    ],
+    "domains": [
+      "",
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "terrain-at"
+    ],
+    "literals": [
+      [],
+      []
+    ]
+  },
+  {
+    "name": "ThreatField",
+    "kebab": "threat-field",
+    "params": null,
+    "results": [
+      "*model.ThreatField"
+    ],
+    "used": false,
+    "keys": [
+      "threat-field"
+    ]
+  },
+  {
+    "name": "TransportCount",
+    "kebab": "transport-count",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": true,
+    "keys": [
+      "transport-count"
+    ]
+  },
+  {
+    "name": "UnassignedIdleAir",
+    "kebab": "unassigned-idle-air",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "unassigned-idle-air"
+    ]
+  },
+  {
+    "name": "UnassignedIdleGround",
+    "kebab": "unassigned-idle-ground",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "unassigned-idle-ground"
+    ]
+  },
+  {
+    "name": "UnassignedIdleNaval",
+    "kebab": "unassigned-idle-naval",
+    "params": null,
+    "results": [
+      "[]model.Unit"
+    ],
+    "used": true,
+    "keys": [
+      "unassigned-idle-naval"
+    ]
+  },
+  {
+    "name": "UnitCount",
+    "kebab": "unit-count",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "int"
+    ],
+    "domains": [
+      "unit"
+    ],
+    "used": true,
+    "keys": [
+      "unit-count(e1)"
+    ],
+    "literals": [
+      [
+        "e1"
+      ]
+    ]
+  },
+  {
+    "name": "WarFactory",
+    "kebab": "war-factory",
+    "params": null,
+    "results": [
+      "*model.Building"
+    ],
+    "used": false,
+    "keys": [
+      "war-factory"
+    ]
+  },
+  {
+    "name": "WeakestVisibleEnemy",
+    "kebab": "weakest-visible-enemy",
+    "params": null,
+    "results": [
+      "*model.Enemy"
+    ],
+    "used": false,
+    "keys": [
+      "weakest-visible-enemy"
+    ]
+  }
+]

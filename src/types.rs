@@ -13,6 +13,13 @@ pub enum Domain {
     BuildingType,
     UnitType,
     SquadName,
+    /// `axis-burned` — attack directions, not units.
+    Axis,
+    SupportPower,
+    /// `form-squad`'s second argument: which pool it draws from.
+    SquadDomain,
+    /// `form-squad`'s fourth: what the squad is for.
+    SquadRole,
 }
 
 impl Domain {
@@ -23,6 +30,10 @@ impl Domain {
             Domain::BuildingType => "building",
             Domain::UnitType => "unit",
             Domain::SquadName => "squad",
+            Domain::Axis => "axis",
+            Domain::SupportPower => "support power",
+            Domain::SquadDomain => "squad domain",
+            Domain::SquadRole => "squad role",
         }
     }
 }

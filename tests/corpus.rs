@@ -176,12 +176,225 @@ fn typos_are_caught() {
     assert_eq!(e.len(), 1, "a single typo should report once: {e:?}");
 }
 
+/// The differential corpus discriminates on every rule.
+///
+/// A rule that is always true, or always false, across the whole corpus is not
+/// being tested by `seed_agrees_with_expr` — the comparison passes for it no
+/// matter what the evaluator does. Six of the thirteen were silently in that
+/// state until this was checked, so it is worth asserting rather than assuming.
+#[test]
+fn the_differential_corpus_exercises_every_rule() {
+    let corpus = differential_corpus();
+    let cases = &corpus.cases;
+    let mut counts: std::collections::HashMap<&str, (usize, usize)> =
+        std::collections::HashMap::new();
+
+    for case in cases {
+        if case.skipped {
+            continue;
+        }
+        let e = counts.entry(case.rule.as_str()).or_default();
+        if case.fired { e.0 += 1 } else { e.1 += 1 }
+    }
+
+    let mut dead: Vec<String> = counts
+        .iter()
+        .filter(|(_, (t, f))| *t == 0 || *f == 0)
+        .map(|(rule, (t, f))| format!("  {rule}: {t} true, {f} false"))
+        .collect();
+    dead.sort();
+
+    assert_eq!(counts.len(), 13, "expected all seed rules in the corpus");
+    assert!(
+        dead.is_empty(),
+        "these rules never change value, so the differential test cannot fail on them:\n{}",
+        dead.join("\n")
+    );
+}
+
+/// Every individual `require` varies across the corpus.
+///
+/// One level below `the_differential_corpus_exercises_every_rule`. A rule can
+/// change value while one of its conjuncts never does — and because `rule_fires`
+/// short-circuits, a conjunct that is always false hides every conjunct after
+/// it. `build-refinery` fires in 11 of 400 states, so it discriminates, but that
+/// says nothing about its other three conditions.
+#[test]
+fn the_differential_corpus_exercises_every_conjunct() {
+    let corpus = differential_corpus();
+    let cases = &corpus.cases;
+    let src = seed_source();
+    let ast = parse_seed();
+
+    let mut counts: Vec<Vec<(usize, usize)>> = ast
+        .rules
+        .iter()
+        .map(|r| vec![(0usize, 0usize); r.requires.len()])
+        .collect();
+
+    for case in cases {
+        if case.skipped {
+            continue;
+        }
+        let Some(ri) = ast.rules.iter().position(|r| r.name.text == case.rule) else {
+            continue;
+        };
+        for (ci, held) in vimyc::eval::conjuncts(&ast.rules[ri], &corpus.states[case.state])
+            .iter()
+            .enumerate()
+        {
+            let e = &mut counts[ri][ci];
+            if *held { e.0 += 1 } else { e.1 += 1 }
+        }
+    }
+
+    // At least this share of cases each way. "Varies at all" is too weak — a
+    // conjunct true in 1 of 400 states discriminates on paper while leaving a
+    // bug in it almost certain to survive.
+    const MIN_SHARE: f64 = 0.05;
+    let per_rule = cases.len() / ast.rules.len();
+    let floor = (per_rule as f64 * MIN_SHARE) as usize;
+
+    let mut thin = Vec::new();
+    for (ri, rule) in ast.rules.iter().enumerate() {
+        for (ci, (t, f)) in counts[ri].iter().enumerate() {
+            if *t <= floor || *f <= floor {
+                let span = rule.requires[ci].span;
+                let text = &src[span.start as usize..span.end as usize];
+                thin.push(format!(
+                    "  {}: `{text}` — {t} true, {f} false",
+                    rule.name.text
+                ));
+            }
+        }
+    }
+
+    let total: usize = counts.iter().map(|r| r.len()).sum();
+    assert_eq!(total, 37, "expected the 37 seed conjuncts");
+    assert!(
+        thin.is_empty(),
+        "{} of {total} conjuncts are exercised in under {}% of cases each way, so a bug \
+         in them would likely survive:\n{}",
+        thin.len(),
+        MIN_SHARE * 100.0,
+        thin.join("\n")
+    );
+}
+
+/// One rule's evaluation, with the state as it stood at that moment.
+///
+/// Per rule rather than per tick: Go mutates `Memory` as its loop runs, so a
+/// single per-tick snapshot would make every squad rule disagree for a reason
+/// that is not a bug. See `docs/design.md`, "Evaluation semantics".
+/// States are stored once and referenced by index — only 400 are distinct, and
+/// inlining each into all thirteen of its cases made the file 21MB.
+#[derive(Debug, Deserialize)]
+struct DifferentialCorpus {
+    states: Vec<vimyc::state::State>,
+    cases: Vec<DifferentialCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DifferentialCase {
+    rule: String,
+    state: usize,
+    fired: bool,
+    /// Blocked by an exclusive rule in the same category, so Go never evaluated
+    /// it. Recorded anyway — see `docs/design.md`.
+    skipped: bool,
+}
+
+fn differential_corpus() -> DifferentialCorpus {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/differential.json");
+    let text = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("{path}: {e}\nregenerate with TestDumpDifferential"));
+    serde_json::from_str(&text).unwrap_or_else(|e| panic!("{path}: {e}"))
+}
+
 /// Milestone 3 — the interpreter agrees with expr on every seed condition.
 ///
-/// Needs expected values from the Go side: evaluate each condition against each
-/// mocked state with expr, dump `(state, condition, expected)`, compare here.
+/// `testdata/differential.jsonl` is generated by `TestDumpDifferential` in
+/// `vimy-core/rules`: Go builds a real `GameState`, evaluates each seed
+/// condition through expr, and projects the state down to the flat view this
+/// crate understands. Go is the source of truth on both sides of the comparison.
 #[test]
-#[ignore = "milestone 3"]
 fn seed_agrees_with_expr() {
-    unimplemented!("wire up the evaluator + expected values");
+    let corpus = differential_corpus();
+    let cases = &corpus.cases;
+    let ast = parse_seed();
+
+    let mut checked = 0usize;
+    let mut mismatches = Vec::new();
+
+    for (i, case) in cases.iter().enumerate() {
+        // Go did not evaluate these, so there is nothing to agree about.
+        if case.skipped {
+            continue;
+        }
+        let rule = ast
+            .rules
+            .iter()
+            .find(|r| r.name.text == case.rule)
+            .unwrap_or_else(|| panic!("line {}: unknown rule `{}`", i + 1, case.rule));
+
+        let got = vimyc::eval::rule_fires(rule, &corpus.states[case.state]);
+        checked += 1;
+        if got != case.fired {
+            mismatches.push(format!(
+                "line {}: `{}` — expr said {}, vimyc said {got}",
+                i + 1,
+                case.rule,
+                case.fired
+            ));
+        }
+    }
+
+    assert!(
+        checked > 1000,
+        "corpus looks truncated: {checked} comparisons"
+    );
+    assert!(
+        mismatches.is_empty(),
+        "{} of {checked} disagreed:\n{}",
+        mismatches.len(),
+        mismatches
+            .iter()
+            .take(5)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    eprintln!("{checked} comparisons, no disagreements");
+}
+
+/// Every production in `docs/grammar.md` in one file.
+///
+/// The grammar is hand-written and nothing enforces that it matches the parser,
+/// so this at least keeps the documented shapes exercised: if a construct stops
+/// parsing, or stops type checking, one of the two has drifted.
+#[test]
+fn the_documented_grammar_parses_and_checks() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/rules/grammar.vy");
+    let src = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
+
+    let (tokens, ld) = vimyc::lexer::lex(&src);
+    assert!(ld.is_empty(), "{ld:?}");
+    let (ast, pd) = vimyc::parser::parse(&tokens);
+    assert!(pd.is_empty(), "{pd:?}");
+    let diags = vimyc::check::check(&ast);
+    assert!(diags.is_empty(), "{diags:?}");
+
+    // The shapes the file is there to cover.
+    let r = &ast.rules[0];
+    assert!(r.exclusive, "category modifier");
+    assert!(r.because.is_some(), "because");
+    assert_eq!(r.lets.len(), 2, "let bindings");
+    assert_eq!(r.action.args.len(), 4, "action arguments");
+    assert_eq!(r.requires.len(), 9, "requires");
+
+    let m = &ast.rules[1];
+    assert!(!m.exclusive);
+    assert!(m.because.is_none());
+    assert!(m.lets.is_empty());
+    assert!(m.action.args.is_empty(), "action without arguments");
 }

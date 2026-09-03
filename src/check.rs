@@ -4,10 +4,10 @@
 //! no type of their own and must be *checked* against what a parameter expects.
 //! `docs/design.md` covers the resolution rules under "Types".
 
-use crate::ast::{Ast, BinOp, Expr, ExprKind, Name, Rule, UnOp};
+use crate::ast::{Action, Ast, BinOp, Expr, ExprKind, Name, Rule, UnOp};
 use crate::diag::{Diagnostic, Span};
 use crate::env;
-use crate::types::{ParamType, Type};
+use crate::types::{Domain, ParamType, Type};
 
 /// Collects rather than bailing, so one bad rule does not hide the rest.
 pub fn check(ast: &Ast) -> Vec<Diagnostic> {
@@ -71,9 +71,43 @@ impl<'a> RuleChecker<'a> {
             let msg = format!("unknown category `{}`", rule.category.text);
             self.error(rule.category.span, msg);
         }
-        if !env::is_action(&rule.action.text) {
-            let msg = format!("unknown action `{}`", rule.action.text);
-            self.error(rule.action.span, msg);
+        self.action(&rule.action);
+    }
+
+    /// An action name, and its arguments when it takes any.
+    fn action(&mut self, action: &Action) {
+        let name = &action.name.text;
+        if let Some(sig) = env::action_signature(name) {
+            if action.args.len() != sig.params.len() {
+                let msg = format!(
+                    "`{name}` expects {} argument(s), got {}",
+                    sig.params.len(),
+                    action.args.len()
+                );
+                self.error(action.span, msg);
+                return;
+            }
+            for (arg, want) in action.args.iter().zip(sig.params.iter()) {
+                self.check_arg(arg, want);
+            }
+            return;
+        }
+
+        if !env::is_action(name) {
+            let msg = format!("unknown action `{name}`");
+            let note = suggest(
+                name,
+                env::ACTIONS
+                    .iter()
+                    .copied()
+                    .chain(env::ACTION_SIGNATURES.iter().map(|a| a.name)),
+            );
+            self.error(action.name.span, msg + &note);
+            return;
+        }
+        if !action.args.is_empty() {
+            let msg = format!("`{name}` takes no arguments");
+            self.error(action.span, msg);
         }
     }
 
@@ -82,7 +116,7 @@ impl<'a> RuleChecker<'a> {
     /// A rule where `cash` means something other than cash is the confusion this
     /// language exists to prevent.
     fn bind(&mut self, name: &Name, ty: Type) {
-        if env::predicate(&name.text).is_some() || env::collection(&name.text).is_some() {
+        if env::predicate(&name.text).is_some() {
             let msg = format!("`{}` is a predicate and cannot be rebound", name.text);
             self.error(name.span, msg);
             return;
@@ -308,10 +342,6 @@ impl<'a> RuleChecker<'a> {
             return Type::Error;
         }
 
-        if env::collection(name).is_some() {
-            return Type::Collection;
-        }
-
         // Outside an argument position there is nothing to say which domain an
         // enum literal belongs to.
         let domains = env::domains_containing(name);
@@ -330,7 +360,6 @@ impl<'a> RuleChecker<'a> {
             env::PREDICATES
                 .iter()
                 .map(|s| s.name)
-                .chain(env::COLLECTIONS.iter().map(|c| c.name))
                 .chain(self.scope.iter().map(|(n, _)| n.as_str())),
         );
         self.error(span, msg + &note);
@@ -346,51 +375,34 @@ impl<'a> RuleChecker<'a> {
             return Type::Error;
         };
 
-        let ExprKind::Ident(name) = &arg.kind else {
-            self.error(
-                arg.span,
-                "`count` takes a name, not an expression".to_string(),
-            );
-            return Type::Error;
-        };
-
-        let mut hits: Vec<&str> = Vec::new();
-        if env::collection(&name.text).is_some() {
-            hits.push("collection");
-        }
-        for d in env::domains_containing(&name.text) {
-            if matches!(
-                d,
-                crate::types::Domain::BuildingType | crate::types::Domain::UnitType
-            ) {
-                hits.push(d.name());
+        // A bare building or unit name counts instances of that type. Anything
+        // else must be an expression producing a collection, which is what lets
+        // `count(damaged-combat-units(0.5))` work alongside
+        // `count(idle-ground-units)`.
+        if let ExprKind::Ident(name) = &arg.kind {
+            let hits: Vec<Domain> = env::domains_containing(&name.text)
+                .into_iter()
+                .filter(|d| matches!(d, Domain::BuildingType | Domain::UnitType))
+                .collect();
+            match hits.len() {
+                1 => return Type::Int,
+                // Never a silent pick — a name quietly meaning something
+                // unintended is the failure this language exists to catch.
+                n if n > 1 => {
+                    let msg = format!("`{}` is ambiguous across domains", name.text);
+                    self.error(name.span, msg);
+                    return Type::Error;
+                }
+                _ => {}
             }
         }
 
-        match hits.len() {
-            1 => Type::Int,
-            0 => {
-                let msg = format!("`{}` is not something that can be counted", name.text);
-                let note = suggest(
-                    &name.text,
-                    env::COLLECTIONS
-                        .iter()
-                        .map(|c| c.name)
-                        .chain(env::BUILDING_TYPES.iter().map(|m| m.name))
-                        .chain(env::UNIT_TYPES.iter().map(|m| m.name)),
-                );
-                self.error(name.span, msg + &note);
-                Type::Error
-            }
-            // Never a silent pick — a name quietly meaning something
-            // unintended is the failure this language exists to catch.
-            _ => {
-                let msg = format!(
-                    "`{}` is ambiguous — it is a {}",
-                    name.text,
-                    hits.join(" and a ")
-                );
-                self.error(name.span, msg);
+        match self.synth(arg) {
+            Type::Collection => Type::Int,
+            Type::Error => Type::Error,
+            other => {
+                let msg = format!("`count` needs a collection or a type name, found {other}");
+                self.error(arg.span, msg);
                 Type::Error
             }
         }
