@@ -78,12 +78,10 @@ impl ParamValues {
                 ParamKind::Int => ParamValue::Int(n as i64),
             });
         }
-        if let Some(extra) = supplied
-            .keys()
-            .find(|k| !ir.params.iter().any(|p| p.name == **k))
-        {
-            return Err(format!("`{extra}` is not a parameter of this rule set"));
-        }
+        // Extra values are not an error. A doctrine is a fixed record of some
+        // thirty numbers and any one rule set uses a handful, so "unknown" is
+        // the normal case rather than a mistake. A misspelling still shows up,
+        // as the parameter it was meant to supply going missing.
         Ok(ParamValues { values })
     }
 }
@@ -234,13 +232,10 @@ mod tests {
                 .contains("no value for parameter `size`")
         );
 
+        // A value the rule set does not declare is ignored, not rejected.
         let mut extra = full();
         extra.insert("naval-weight".into(), 0.2);
-        assert!(
-            ParamValues::bind(&ir, &extra)
-                .unwrap_err()
-                .contains("not a parameter")
-        );
+        assert!(ParamValues::bind(&ir, &extra).is_ok());
 
         let mut fractional = full();
         fractional.insert("size".into(), 7.5);

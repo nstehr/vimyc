@@ -148,3 +148,22 @@ too; see `docs/design.md` for why.
 `project()` lives in `rules/project.go` rather than in a test, because the
 offline dump and the live exporter both need it and two implementations would
 drift into differential failures that are not bugs.
+
+## The acceptance corpus
+
+`testdata/acceptance.json`, written by `TestDumpAcceptanceCorpus` in vimy-core:
+
+```
+cd vimy-core && DUMP_DIR=../../vimyc/testdata go test ./rules/ -run TestDumpAcceptanceCorpus
+```
+
+500 archived doctrines, each with the rule set `CompileDoctrine` produces for it.
+No recorded game is involved, because none is needed — `CompileDoctrine` is a
+pure function of a `Doctrine`, so its inputs are the whole story. That makes it a
+wider corpus than the recorded rule sets and one with nothing to pair.
+
+`tests/acceptance.rs` compares a ported `.vy` block against it, over every
+doctrine. Only the rule names the file defines are compared, so an unported block
+is absent from both sides rather than a failure. A rule vimyc emits that Go did
+not — or the reverse — is a gate that is wrong, which is the mistake a hand-port
+makes most.
