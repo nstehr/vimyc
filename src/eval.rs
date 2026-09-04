@@ -130,13 +130,25 @@ fn apply_builtin(id: env::Builtin, args: &[Value]) -> Value {
         }
         (env::Builtin::Lerpf, [min, max, t]) => {
             let (min, max) = (as_f64(*min), as_f64(*max));
-            Value::Float(min + (max - min) * as_f64(*t))
+            // Fused, because Go's is. The spec lets a Go implementation contract
+            // `min + (max-min)*t` into one operation, and on arm64 it does — one
+            // rounding instead of two, so `lerpf(0.05, 0.15, 0.6)` is 0.11 there
+            // and 0.10999999999999999 with separate operations.
+            Value::Float((max - min).mul_add(as_f64(*t), min))
         }
         (env::Builtin::Max, [a, b]) => Value::Float(as_f64(*a).max(as_f64(*b))),
         (env::Builtin::Min, [a, b]) => Value::Float(as_f64(*a).min(as_f64(*b))),
         // Toward zero, like Go's `int(x)`, and saturating like every other
         // integer path here.
         (env::Builtin::Trunc, [x]) => Value::Int(as_f64(*x).trunc() as i64),
+        // Go's `%.2f`: a correctly rounded decimal conversion with ties to
+        // even, which `{:.2}` also does. Scaling by 100 and rounding does not
+        // agree — it takes 0.125 to 0.13 where Go gives 0.12.
+        (env::Builtin::Round2, [x]) => Value::Float(
+            format!("{:.2}", as_f64(*x))
+                .parse()
+                .unwrap_or_else(|_| unreachable!("a formatted float did not parse")),
+        ),
         (env::Builtin::Select, [cond, a, b]) => {
             if expect_bool(*cond) {
                 Value::Float(as_f64(*a))

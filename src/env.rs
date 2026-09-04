@@ -117,6 +117,12 @@ pub enum Builtin {
     /// Distinct from `lerp`, which rounds — the difference is an off-by-one in
     /// a threshold, and those are hard to see in a diff.
     Trunc,
+    /// Two decimal places.
+    ///
+    /// Not cosmetic: Go writes these thresholds into the condition with
+    /// `%.2f`, and the state key a call is recorded under comes from that text.
+    /// The action beside it keeps full precision, so the two genuinely differ.
+    Round2,
     /// The one builtin that takes a bool. Go writes doctrine-dependent values
     /// as `x := a; if cond { x = b }`, which is neither a lerp nor a clamp.
     Select,
@@ -163,6 +169,12 @@ pub const BUILTINS: &[BuiltinSignature] = &[
         name: "trunc",
         params: &[F],
         ret: Type::Int,
+    },
+    BuiltinSignature {
+        id: Builtin::Round2,
+        name: "round2",
+        params: &[F],
+        ret: Type::Float,
     },
     BuiltinSignature {
         id: Builtin::Select,

@@ -38,9 +38,39 @@ fn corpus() -> Option<Vec<Case>> {
 /// reaches the engine — `emitted_expr_round_trips_on_a_real_game` covers the
 /// same ground for the seed set.
 fn normalise(s: &str) -> String {
-    s.split_whitespace()
-        .collect::<String>()
-        .replace(['(', ')'], "")
+    trim_zeros(
+        &s.split_whitespace()
+            .collect::<String>()
+            .replace(['(', ')'], ""),
+    )
+}
+
+/// Go writes a threshold with `%.2f`, so `0.5` arrives as `0.50`. The value is
+/// the same and Go's own projection normalises the literal before recording a
+/// state key, so the trailing zeros reach nothing.
+fn trim_zeros(s: &str) -> String {
+    let b: Vec<char> = s.chars().collect();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == '.' && i > 0 && b[i - 1].is_ascii_digit() {
+            let mut end = i + 1;
+            while end < b.len() && b[end].is_ascii_digit() {
+                end += 1;
+            }
+            let frac: String = b[i + 1..end].iter().collect();
+            let frac = frac.trim_end_matches('0');
+            if !frac.is_empty() {
+                out.push('.');
+                out.push_str(frac);
+            }
+            i = end;
+            continue;
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    out
 }
 
 #[test]
@@ -56,6 +86,16 @@ fn the_buildings_block_matches_go() {
 #[test]
 fn the_production_block_matches_go() {
     block_matches_go("production.vy");
+}
+
+#[test]
+fn the_combat_block_matches_go() {
+    block_matches_go("combat.vy");
+}
+
+#[test]
+fn the_micro_block_matches_go() {
+    block_matches_go("micro.vy");
 }
 
 fn block_matches_go(file: &str) {

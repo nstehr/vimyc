@@ -217,3 +217,24 @@ LLM output clusters. A corpus of it covers what the model says, not what the
 compiler decides. `boundaryDoctrines` sweeps every weight across all six
 thresholds and staggers two of them so the differences the compiler takes are
 non-zero; the same mutation now moves 20 rules.
+
+## Go fuses a multiply-add and Rust does not
+
+`lerpf(0.05, 0.15, 0.6)` is 0.11 in Go and 0.10999999999999999 in Rust, from the
+same doubles and the same expression. Go's spec permits contracting
+`min + (max-min)*t` into a single operation, and on arm64 it does — one rounding
+rather than two. Rust never fuses without being asked.
+
+`mul_add` matches it. Worth knowing that this is platform-dependent on Go's side:
+the same compiler on amd64 need not fuse, so a corpus regenerated there could
+disagree with one generated here. Nothing downstream cares — the two values differ
+by an ulp and both round to the same threshold — but a byte-exact comparison does.
+
+## `%.2f` is not "multiply by 100 and round"
+
+Go writes squad thresholds into conditions with `%.2f`, so a rounding is part of
+the emitted text and therefore part of the state key. The obvious implementation,
+`(x * 100.0).round() / 100.0`, disagrees with Go on ties: 0.125 is exactly
+representable, and Go's correctly rounded conversion takes it to 0.12 while
+`round` takes it to 0.13. Formatting with `{:.2}` and parsing back agrees,
+because both languages round the decimal conversion to even.
