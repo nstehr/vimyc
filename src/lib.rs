@@ -18,6 +18,7 @@ pub mod ir;
 pub mod lexer;
 pub mod lower;
 pub mod parser;
+pub mod specialise;
 pub mod state;
 pub mod token;
 pub mod types;

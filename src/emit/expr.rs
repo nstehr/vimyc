@@ -20,7 +20,15 @@ pub fn emit(ir: &Ir, params: &ParamValues) -> Vec<RuleSource> {
 }
 
 fn emit_rule(rule: &IrRule, params: &ParamValues) -> RuleSource {
-    let mut condition = String::new();
+    // A rule with no conjuncts is vacuously true, and expr will not compile an
+    // empty string — `unexpected token EOF`. Reachable two ways: a rule written
+    // without any `require`, and one whose every conjunct was a doctrine gate
+    // that `specialise` folded away.
+    let mut condition = if rule.requires.is_empty() {
+        "true".to_string()
+    } else {
+        String::new()
+    };
     for (i, require) in rule.requires.iter().enumerate() {
         if i > 0 {
             condition.push_str(" && ");

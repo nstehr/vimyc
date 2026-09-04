@@ -71,7 +71,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         None => std::collections::HashMap::new(),
     };
+    let mut checked = checked;
     let params = vimyc::ir::ParamValues::bind(&checked.ir, &supplied)?;
+    // Applied before anything reads the rule set, so `--json` and an evaluation
+    // see the same rules the doctrine actually leaves behind.
+    vimyc::specialise::specialise(&mut checked.ir, &params);
 
     if emit_json {
         let vimyc::emit::Artifact::Expr(rules) =

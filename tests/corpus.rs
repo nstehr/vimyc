@@ -601,7 +601,9 @@ fn parameters_fold_through_to_expr() {
         ("naval-weight".to_string(), 0.4),
         ("ground-attack-group-size".to_string(), 8.0),
     ]);
+    let mut ir = ir;
     let params = vimyc::ir::ParamValues::bind(&ir, &doctrine).expect("binds");
+    vimyc::specialise::specialise(&mut ir, &params);
     let vimyc::emit::Artifact::Expr(rules) =
         vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr);
 
@@ -625,13 +627,26 @@ fn parameters_fold_through_to_expr() {
         form.condition
     );
 
-    // A gate folds to a constant comparison rather than removing the rule —
-    // see the note in docs/design.md about dead conjuncts.
+    // The gate held, so it is gone rather than folded to `0.4 >= 0.3`.
     assert!(
-        form.condition.starts_with("0.4 >= 0.3"),
+        form.condition.starts_with("MapHasWater()"),
         "{}",
         form.condition
     );
+
+    // And with a doctrine that ignores the sea, neither rule is there at all —
+    // which is what CompileDoctrine does in Go.
+    let mut ir = vimyc::check::check(&ast).expect("checks").ir;
+    let land = std::collections::HashMap::from([
+        ("aggression".to_string(), 0.7),
+        ("naval-weight".to_string(), 0.1),
+        ("ground-attack-group-size".to_string(), 8.0),
+    ]);
+    let params = vimyc::ir::ParamValues::bind(&ir, &land).expect("binds");
+    vimyc::specialise::specialise(&mut ir, &params);
+    let vimyc::emit::Artifact::Expr(rules) =
+        vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr);
+    assert!(rules.is_empty(), "{rules:?}");
 }
 
 /// Rounding is where a hand-written `lerp` and Go's diverge, so it is pinned

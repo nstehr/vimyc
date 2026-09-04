@@ -364,23 +364,28 @@ Priorities are the one thing that must be folded per doctrine either way, since
 the engine sorts on them. Deferring this choice is most of the reason to put
 parameters in the language rather than to keep templating rule text in Go.
 
-### Folding leaves the gate behind
+### Specialising, and why a gate must not survive folding
 
-A folded gate becomes a constant comparison rather than removing the rule:
+Folding alone turns a gate into a constant comparison rather than removing the
+rule, which is not what Go does — `CompileDoctrine` emits no naval rules at all
+for a land doctrine. `specialise` restores that: a conjunct decidable from
+parameters alone is settled at fold time, false dropping the rule and true
+dropping the conjunct.
 
 ```
-require naval-weight >= 0.3     ->     0.4 >= 0.3 && MapHasWater() && ...
+require naval-weight >= 0.3      naval-weight 0.4      MapHasWater() && ...
+require map-has-water()      ->                   ->
+                                 naval-weight 0.1      (no rule)
 ```
 
-Go drops the rule entirely when the gate is false, so the emitted set does not
-yet match what `CompileDoctrine` produces — a false gate leaves a rule that never
-fires instead of no rule at all. Behaviour is the same and the cost is one
-comparison, but two things want it fixed: comparing against real rule sets is
-the acceptance test for this whole design, and `check_shadowed_rules` reasons
-about conjuncts that would then always hold.
+It matters beyond tidiness. Comparing against real rule sets is the acceptance
+test for this whole design, and that compares rule *sets* — a rule Go never
+emitted cannot be matched by one that is present but never fires.
 
-The fix is a fold-time pass that evaluates the static conjuncts, drops the rule
-if any is false and drops the conjunct if it is true. Not written yet.
+One consequence worth knowing: a rule that was nothing but its gate ends up with
+no conjuncts at all, and expr will not compile an empty condition. The emitter
+writes `true` for it. The same hole was already reachable by writing a rule with
+no `require`, where it produced `unexpected token EOF` from Go.
 
 ### Not parameters
 
