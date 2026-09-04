@@ -24,6 +24,10 @@ def defense-cap() = lerp(2, 10, ground-defense-priority)
 
 def war-factory-base() = lerp(580, 730, vehicle-weight)
 
+def affordable(cost: int) =
+  cash >= cost
+  and (vehicle-weight <= 0.1 or has-role(radar) or cash >= cost + 1000)
+
 rule build-radar {
   priority trunc(select(prefers-radar-gated-primary > 0, 710.0, 570.0))
   category economy exclusive
@@ -142,7 +146,7 @@ rule build-base-defense {
   require power-excess >= 0
   require any-ground-defense-buildable()
   require ground-defense-count() < defense-cap()
-  require cash >= lerp(1500, 300, ground-defense-priority)
+  require affordable(lerp(1500, 300, ground-defense-priority))
 }
 
 rule build-base-defense-rush {
@@ -168,7 +172,7 @@ rule build-aa-defense {
   require power-excess >= 0
   require can-build-role(aa-defense)
   require role-count(aa-defense) < lerp(2, 5, air-defense-priority)
-  require cash >= lerp(1200, 500, air-defense-priority)
+  require affordable(lerp(1200, 500, air-defense-priority))
 }
 
 rule build-gap-generator {
@@ -183,7 +187,7 @@ rule build-gap-generator {
   require can-build-role(gap-generator)
   require has-role(tech-center)
   require role-count(gap-generator) < lerp(1, 2, ground-defense-priority)
-  require cash >= 800
+  require affordable(800)
 }
 
 rule build-tech-center {
