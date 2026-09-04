@@ -200,6 +200,16 @@ fn block_matches_go(file: &str) {
 /// The per-block tests only compare the names their file defines, so a rule
 /// nobody ported would pass unnoticed everywhere. This is what says the port is
 /// finished rather than merely correct as far as it goes.
+/// The blocks combined: one rule set, which is what a game would actually run.
+///
+/// Not a formality — the blocks share parameter and def names, so combining
+/// them means keeping one of each, and two definitions that merely looked alike
+/// would show up here as a rule set that no longer matches Go.
+#[test]
+fn the_combined_rule_set_matches_go() {
+    block_matches_go("doctrine.vy");
+}
+
 #[test]
 fn the_blocks_cover_every_rule_go_emits() {
     const BLOCKS: &[&str] = &[
