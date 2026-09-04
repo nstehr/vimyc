@@ -63,6 +63,7 @@ fn lower_rule(rule: &Rule, params: &[String]) -> IrRule {
             .map(|r| lower_expr(r, &scope, params))
             .collect(),
         lets,
+        name_span: rule.name.span,
         span: rule.span,
     }
 }

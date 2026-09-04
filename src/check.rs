@@ -118,8 +118,6 @@ impl Checker {
             }
             .rule(rule);
         }
-        self.check_priority_collisions(ast);
-        self.check_shadowed_rules(ast);
     }
 
     /// Records the declared parameters, rejecting duplicates and any name that
@@ -580,114 +578,21 @@ impl<'a> RuleChecker<'a> {
     }
 }
 
-impl Checker {
-    // ---- whole-rule-set passes ----
-    //
-    // The checks Go structurally cannot do. See `docs/design.md`.
+/// Levenshtein distance, two rows rather than a full matrix.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut cur = vec![0; b.len() + 1];
 
-    /// Two rules sharing a category and a priority.
-    ///
-    ///
-    /// Go sorts by priority with `sort.Slice`, which is not stable, so equal
-    /// priorities order arbitrarily. Within a category that decides which of the
-    /// two an exclusive rule blocks — a coin flip that can land differently
-    /// between runs of the same rule set.
-    fn check_priority_collisions(&mut self, ast: &Ast) {
-        for (i, a) in ast.rules.iter().enumerate() {
-            for b in &ast.rules[i + 1..] {
-                let (Some(pa), Some(pb)) =
-                    (literal_priority(&a.priority), literal_priority(&b.priority))
-                else {
-                    continue;
-                };
-                if pa == pb && a.category.text == b.category.text {
-                    let msg = format!(
-                        "`{}` and `{}` share priority {} in category `{}`, so their order is undefined",
-                        a.name.text, b.name.text, pa, a.category.text
-                    );
-                    self.diags.push(Diagnostic::warning(b.name.span, msg));
-                }
-            }
+    for (i, ca) in a.chars().enumerate() {
+        cur[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let cost = usize::from(ca != *cb);
+            cur[j + 1] = (prev[j] + cost).min(prev[j + 1] + 1).min(cur[j] + 1);
         }
+        std::mem::swap(&mut prev, &mut cur);
     }
-
-    /// A rule that can never fire because an exclusive rule above it always
-    /// fires first.
-    ///
-    /// Sound but deliberately narrow: if the higher rule's conjuncts are a
-    /// subset of the lower one's, then whenever the lower rule's conditions hold
-    /// the higher one's do too. Anything cleverer needs implication rather than
-    /// containment, which needs a solver.
-    fn check_shadowed_rules(&mut self, ast: &Ast) {
-        // Every pair, not just earlier ones: "higher" is decided by priority, and
-        // the engine sorts by priority regardless of where a rule sits in the
-        // file.
-        for (i, lower) in ast.rules.iter().enumerate() {
-            for (j, higher) in ast.rules.iter().enumerate() {
-                if i == j || !higher.exclusive || higher.category.text != lower.category.text {
-                    continue;
-                }
-                let (Some(hp), Some(lp)) = (
-                    literal_priority(&higher.priority),
-                    literal_priority(&lower.priority),
-                ) else {
-                    continue;
-                };
-                if hp <= lp {
-                    continue;
-                }
-                let covered = higher
-                    .requires
-                    .iter()
-                    .all(|h| lower.requires.iter().any(|l| same_expr(h, l)));
-                if covered {
-                    let msg = format!(
-                        "`{}` can never fire: `{}` is exclusive, higher priority, and its conditions are implied by these",
-                        lower.name.text, higher.name.text
-                    );
-                    self.diags.push(Diagnostic::warning(lower.name.span, msg));
-                }
-            }
-        }
-    }
-}
-
-/// A priority that is already a number.
-///
-/// Both whole-set passes compare priorities, and once a doctrine can set one
-/// there may be no number to compare until the parameters arrive. Rather than
-/// guess, they skip any pair that is not literal on both sides — so a
-/// parameterised rule set gets these checks at resolve time or not at all.
-/// `docs/design.md` covers why priority is the one field with two phases.
-fn literal_priority(e: &Expr) -> Option<i64> {
-    match e.kind {
-        ExprKind::Int(n) => Some(n),
-        _ => None,
-    }
-}
-
-/// Structural equality, ignoring spans.
-///
-/// Two conjuncts written in different places are the same condition, so the
-/// derived `PartialEq` would be wrong here even if `Expr` had one.
-fn same_expr(a: &Expr, b: &Expr) -> bool {
-    match (&a.kind, &b.kind) {
-        (ExprKind::Int(x), ExprKind::Int(y)) => x == y,
-        (ExprKind::Float(x), ExprKind::Float(y)) => x == y,
-        (ExprKind::Ident(x), ExprKind::Ident(y)) => x.text == y.text,
-        (ExprKind::Call(x, xs), ExprKind::Call(y, ys)) => {
-            x.text == y.text
-                && xs.len() == ys.len()
-                && xs.iter().zip(ys).all(|(p, q)| same_expr(p, q))
-        }
-        (ExprKind::Unary(xo, x), ExprKind::Unary(yo, y)) => xo == yo && same_expr(x, y),
-        (ExprKind::Binary(xo, xl, xr), ExprKind::Binary(yo, yl, yr)) => {
-            xo == yo && same_expr(xl, yl) && same_expr(xr, yr)
-        }
-        // Two holes are not known to be the same condition.
-        (ExprKind::Error, _) | (_, ExprKind::Error) => false,
-        _ => false,
-    }
+    prev[b.len()]
 }
 
 /// A " (did you mean `x`?)" note, or nothing when nothing is close.
@@ -706,23 +611,6 @@ fn suggest<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> String 
         Some((_, c)) => format!(" (did you mean `{c}`?)"),
         None => String::new(),
     }
-}
-
-/// Levenshtein distance, two rows rather than a full matrix.
-fn edit_distance(a: &str, b: &str) -> usize {
-    let b: Vec<char> = b.chars().collect();
-    let mut prev: Vec<usize> = (0..=b.len()).collect();
-    let mut cur = vec![0; b.len() + 1];
-
-    for (i, ca) in a.chars().enumerate() {
-        cur[0] = i + 1;
-        for (j, cb) in b.iter().enumerate() {
-            let cost = usize::from(ca != *cb);
-            cur[j + 1] = (prev[j] + cost).min(prev[j + 1] + 1).min(cur[j] + 1);
-        }
-        std::mem::swap(&mut prev, &mut cur);
-    }
-    prev[b.len()]
 }
 
 #[cfg(test)]
@@ -746,50 +634,6 @@ mod tests {
     }
 
     #[test]
-    fn equal_priorities_in_one_category_are_reported() {
-        let e = messages(
-            "rule a {\n priority 5\n category economy\n do scout\n require cash >= 1\n}\n\
-             rule b {\n priority 5\n category economy\n do scout\n require cash >= 2\n}\n",
-        );
-        assert_eq!(e.len(), 1, "{e:?}");
-        assert!(e[0].contains("share priority 5"), "{e:?}");
-    }
-
-    #[test]
-    fn equal_priorities_in_different_categories_are_fine() {
-        let e = messages(
-            "rule a {\n priority 5\n category economy\n do scout\n require cash >= 1\n}\n\
-             rule b {\n priority 5\n category combat\n do scout\n require cash >= 2\n}\n",
-        );
-        assert!(e.is_empty(), "{e:?}");
-    }
-
-    #[test]
-    fn a_rule_under_a_broader_exclusive_one_can_never_fire() {
-        // `a` requires strictly less than `b`, so whenever `b` would fire `a`
-        // already has, and `a` is exclusive.
-        let e = messages(
-            "rule a {\n priority 9\n category economy exclusive\n do scout\n require cash >= 1\n}\n\
-             rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n require has-role(barracks)\n}\n",
-        );
-        assert_eq!(e.len(), 1, "{e:?}");
-        assert!(e[0].contains("can never fire"), "{e:?}");
-    }
-
-    #[test]
-    fn shadowing_is_found_whichever_order_the_rules_appear() {
-        // "Higher" means priority, not position, so both orderings must report.
-        let hi = "rule a {\n priority 9\n category economy exclusive\n do scout\n require cash >= 1\n}\n";
-        let lo = "rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n require has-role(barracks)\n}\n";
-
-        let forward = messages(&format!("{hi}{lo}"));
-        let reversed = messages(&format!("{lo}{hi}"));
-        assert_eq!(forward.len(), 1, "{forward:?}");
-        assert_eq!(reversed.len(), 1, "low-priority rule first: {reversed:?}");
-        assert_eq!(forward, reversed);
-    }
-
-    #[test]
     fn ordering_needs_numbers() {
         let e = messages(
             "rule r {\n priority 1\n category economy\n do scout\n require base-under-attack < enemies-visible\n}\n",
@@ -802,25 +646,6 @@ mod tests {
     fn equality_still_works_on_bools() {
         let e = messages(
             "rule r {\n priority 1\n category economy\n do scout\n require base-under-attack == enemies-visible\n}\n",
-        );
-        assert!(e.is_empty(), "{e:?}");
-    }
-
-    #[test]
-    fn a_narrower_rule_above_does_not_shadow() {
-        // `a` requires *more* than `b`, so `b` can still fire on its own.
-        let e = messages(
-            "rule a {\n priority 9\n category economy exclusive\n do scout\n require cash >= 1\n require has-role(barracks)\n}\n\
-             rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n}\n",
-        );
-        assert!(e.is_empty(), "{e:?}");
-    }
-
-    #[test]
-    fn a_non_exclusive_rule_above_does_not_shadow() {
-        let e = messages(
-            "rule a {\n priority 9\n category economy\n do scout\n require cash >= 1\n}\n\
-             rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n require has-role(barracks)\n}\n",
         );
         assert!(e.is_empty(), "{e:?}");
     }
@@ -839,9 +664,10 @@ mod tests {
         let (t, _) = lex(shadowed);
         let (ast, pd) = parse(&t);
         assert!(pd.is_empty(), "{pd:?}");
+        // The shadowing itself is reported by `specialise::validate`, which
+        // needs a doctrine; what matters here is that a warnable rule set still
+        // yields an `Ir`.
         let checked = check(&ast).expect("a warning must not stop lowering");
-        assert_eq!(checked.warnings.len(), 1, "{:?}", checked.warnings);
-        assert!(checked.warnings[0].message.contains("can never fire"));
         assert_eq!(checked.ir.rules.len(), 2);
 
         let typo = "rule r {\n priority 1\n category economy\n do scout\n \

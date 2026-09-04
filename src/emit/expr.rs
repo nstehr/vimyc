@@ -101,6 +101,7 @@ fn emit_bare(e: &IrExpr, rule: &IrRule, params: &ParamValues, out: &mut String) 
     match &e.kind {
         IrExprKind::Int(n) => out.push_str(&n.to_string()),
         IrExprKind::Float(f) => out.push_str(&crate::state::render_number(*f)),
+        IrExprKind::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
 
         // Folded to the number the doctrine supplied. The other binding time —
         // the engine answering `Aggression()` at evaluation time — would emit a
@@ -161,6 +162,7 @@ fn emit_expr(e: &IrExpr, rule: &IrRule, params: &ParamValues, parent: u8, out: &
     match &e.kind {
         IrExprKind::Int(n) => out.push_str(&n.to_string()),
         IrExprKind::Float(f) => out.push_str(&crate::state::render_number(*f)),
+        IrExprKind::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
 
         // Folded to the number the doctrine supplied. The other binding time —
         // the engine answering `Aggression()` at evaluation time — would emit a

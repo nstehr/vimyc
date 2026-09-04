@@ -11,8 +11,10 @@
 //! `emit` turns a parameter into a number, and this turns what that number
 //! decided into structure.
 
+use crate::ast::BinOp;
+use crate::diag::Diagnostic;
 use crate::eval::{Value, static_eval};
-use crate::ir::{Ir, IrExpr, IrExprKind, ParamValues};
+use crate::ir::{Ir, IrExpr, IrExprKind, IrRule, ParamValues};
 
 /// Applies a doctrine, dropping what it rules out.
 ///
@@ -24,25 +26,105 @@ use crate::ir::{Ir, IrExpr, IrExprKind, ParamValues};
 /// rebuilding the tree to do that would need `Clone` on every node for no gain.
 pub fn specialise(ir: &mut Ir, params: &ParamValues) {
     ir.rules.retain_mut(|rule| {
+        for binding in &mut rule.lets {
+            simplify(binding, params);
+        }
         let mut alive = true;
-        rule.requires.retain(|conjunct| {
+        rule.requires.retain_mut(|conjunct| {
             // Once the rule is doomed, leave the rest alone — it is about to be
-            // dropped, and evaluating further conjuncts could only mislead a
-            // reader of the result.
-            if !alive || !is_static(conjunct) {
+            // dropped, and simplifying further could only mislead a reader of
+            // the result.
+            if !alive {
                 return true;
             }
-            match static_eval(conjunct, params) {
-                Value::Bool(true) => false,
-                Value::Bool(false) => {
+            simplify(conjunct, params);
+            match conjunct.kind {
+                IrExprKind::Bool(true) => false,
+                IrExprKind::Bool(false) => {
                     alive = false;
                     true
                 }
-                other => unreachable!("a require folded to {other:?} rather than a bool"),
+                _ => true,
             }
         });
         alive
     });
+}
+
+/// Folds what the doctrine settles, in place.
+///
+/// Two steps, and the second is why the first is not enough. A subtree that
+/// reads nothing but parameters becomes the value it has. Then `and` and `or`
+/// absorb whichever side that produced, which is what turns Go's conditionally
+/// appended clause —
+///
+/// ```text
+/// require base-defense-floor <= 0 or role-count(pillbox) >= base-defense-floor
+/// ```
+///
+/// — into nothing at all when the floor is zero, rather than into
+/// `0 <= 0 || RoleCount("pillbox") >= 0`. Go does not emit that clause, so
+/// neither can this.
+fn simplify(e: &mut IrExpr, params: &ParamValues) {
+    if is_static(e) {
+        let span = e.span;
+        e.kind = match static_eval(e, params) {
+            Value::Int(n) => IrExprKind::Int(n),
+            Value::Float(f) => IrExprKind::Float(f),
+            Value::Bool(b) => IrExprKind::Bool(b),
+            // The payload of an optional is unreachable from the language, so
+            // nothing static can have this type.
+            Value::Opt(_) => unreachable!("a static expression produced an optional"),
+        };
+        e.span = span;
+        return;
+    }
+
+    match &mut e.kind {
+        IrExprKind::Unary(_, operand) => simplify(operand, params),
+        IrExprKind::Predicate(_, args) | IrExprKind::Builtin(_, args) => {
+            for a in args {
+                simplify(a, params);
+            }
+        }
+        IrExprKind::Binary(op, l, r) => {
+            simplify(l, params);
+            simplify(r, params);
+            // One side may now be a constant even though the whole is not.
+            if let Some(kind) = absorb(*op, l, r) {
+                e.kind = kind;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// `true && x` is `x`, `false || x` is `x`, and the other two settle the whole
+/// expression. `None` when neither side is a constant.
+fn absorb(op: BinOp, l: &mut IrExpr, r: &mut IrExpr) -> Option<IrExprKind> {
+    let take = |side: &mut IrExpr| {
+        std::mem::replace(
+            &mut side.kind,
+            // Any placeholder: the node it came from is being discarded.
+            IrExprKind::Bool(false),
+        )
+    };
+    match (op, as_bool(l), as_bool(r)) {
+        (BinOp::And, Some(false), _) | (BinOp::And, _, Some(false)) => {
+            Some(IrExprKind::Bool(false))
+        }
+        (BinOp::Or, Some(true), _) | (BinOp::Or, _, Some(true)) => Some(IrExprKind::Bool(true)),
+        (BinOp::And, Some(true), _) | (BinOp::Or, Some(false), _) => Some(take(r)),
+        (BinOp::And, _, Some(true)) | (BinOp::Or, _, Some(false)) => Some(take(l)),
+        _ => None,
+    }
+}
+
+fn as_bool(e: &IrExpr) -> Option<bool> {
+    match e.kind {
+        IrExprKind::Bool(b) => Some(b),
+        _ => None,
+    }
 }
 
 /// Whether this expression can be decided without game state.
@@ -56,11 +138,113 @@ pub fn specialise(ir: &mut Ir, params: &ParamValues) {
 /// case no real rule set has: a doctrine gate written through a binding.
 pub(crate) fn is_static(e: &IrExpr) -> bool {
     match &e.kind {
-        IrExprKind::Int(_) | IrExprKind::Float(_) | IrExprKind::Param(_) => true,
+        IrExprKind::Int(_) | IrExprKind::Float(_) | IrExprKind::Bool(_) => true,
+        IrExprKind::Param(_) => true,
         IrExprKind::Predicate(..) | IrExprKind::Member(..) | IrExprKind::Binding(_) => false,
         IrExprKind::Builtin(_, args) => args.iter().all(is_static),
         IrExprKind::Unary(_, operand) => is_static(operand),
         IrExprKind::Binary(_, l, r) => is_static(l) && is_static(r),
+    }
+}
+
+/// The checks that need a whole rule set *and* its doctrine.
+///
+/// These used to run in `check`, where a priority is still an expression — so
+/// once a doctrine could set one, they silently skipped every rule whose
+/// priority was a `lerp`, which after a port of `CompileDoctrine` is nearly all
+/// of them. Here the numbers exist.
+///
+/// Warnings, not errors: both describe a rule set that runs and is probably not
+/// what was meant.
+pub fn validate(ir: &Ir, params: &ParamValues) -> Vec<Diagnostic> {
+    let resolved: Vec<(i64, &IrRule)> = ir
+        .rules
+        .iter()
+        .map(|r| (crate::eval::priority(r, params), r))
+        .collect();
+
+    let mut diags = Vec::new();
+    collisions(&resolved, &mut diags);
+    shadowed(&resolved, &mut diags);
+    diags
+}
+
+/// Two rules sharing a category and a priority.
+///
+/// Go sorts by priority with `sort.Slice`, which is not stable, so equal
+/// priorities order arbitrarily. Within a category that decides which of the two
+/// an exclusive rule blocks — a coin flip that can land differently between runs
+/// of the same rule set.
+fn collisions(rules: &[(i64, &IrRule)], diags: &mut Vec<Diagnostic>) {
+    for (i, (pa, a)) in rules.iter().enumerate() {
+        for (pb, b) in &rules[i + 1..] {
+            if pa == pb && a.category == b.category {
+                let msg = format!(
+                    "`{}` and `{}` share priority {pa} in category `{}`, so their order is undefined",
+                    a.name,
+                    b.name,
+                    crate::env::category_name(a.category.0)
+                );
+                diags.push(Diagnostic::warning(b.name_span, msg));
+            }
+        }
+    }
+}
+
+/// A rule that can never fire because an exclusive rule above it always fires
+/// first.
+///
+/// Sound but deliberately narrow: if the higher rule's conjuncts are a subset of
+/// the lower one's, then whenever the lower rule's conditions hold the higher
+/// one's do too. Anything cleverer needs implication rather than containment,
+/// which needs a solver.
+fn shadowed(rules: &[(i64, &IrRule)], diags: &mut Vec<Diagnostic>) {
+    // Every pair, not just earlier ones: "higher" is decided by priority, and
+    // the engine sorts by priority regardless of where a rule sits in the file.
+    for (i, (lp, lower)) in rules.iter().enumerate() {
+        for (j, (hp, higher)) in rules.iter().enumerate() {
+            if i == j || !higher.exclusive || higher.category != lower.category || hp <= lp {
+                continue;
+            }
+            let covered = higher
+                .requires
+                .iter()
+                .all(|h| lower.requires.iter().any(|l| same_expr(h, l)));
+            if covered {
+                let msg = format!(
+                    "`{}` can never fire: `{}` is exclusive, higher priority, and its conditions are implied by these",
+                    lower.name, higher.name
+                );
+                diags.push(Diagnostic::warning(lower.name_span, msg));
+            }
+        }
+    }
+}
+
+/// Structural equality, ignoring spans.
+///
+/// On the IR rather than the AST, which makes it stricter in the useful
+/// direction: names are already resolved, so `count(powr)` and
+/// `building-count(powr)` are the same conjunct here and were not before.
+fn same_expr(a: &IrExpr, b: &IrExpr) -> bool {
+    match (&a.kind, &b.kind) {
+        (IrExprKind::Int(x), IrExprKind::Int(y)) => x == y,
+        (IrExprKind::Float(x), IrExprKind::Float(y)) => x == y,
+        (IrExprKind::Bool(x), IrExprKind::Bool(y)) => x == y,
+        (IrExprKind::Param(x), IrExprKind::Param(y)) => x == y,
+        (IrExprKind::Binding(x), IrExprKind::Binding(y)) => x == y,
+        (IrExprKind::Member(dx, ix), IrExprKind::Member(dy, iy)) => dx == dy && ix == iy,
+        (IrExprKind::Predicate(x, xs), IrExprKind::Predicate(y, ys)) => {
+            x == y && xs.len() == ys.len() && xs.iter().zip(ys).all(|(p, q)| same_expr(p, q))
+        }
+        (IrExprKind::Builtin(x, xs), IrExprKind::Builtin(y, ys)) => {
+            x == y && xs.len() == ys.len() && xs.iter().zip(ys).all(|(p, q)| same_expr(p, q))
+        }
+        (IrExprKind::Unary(xo, x), IrExprKind::Unary(yo, y)) => xo == yo && same_expr(x, y),
+        (IrExprKind::Binary(xo, xl, xr), IrExprKind::Binary(yo, yl, yr)) => {
+            xo == yo && same_expr(xl, yl) && same_expr(xr, yr)
+        }
+        _ => false,
     }
 }
 
@@ -212,5 +396,166 @@ mod tests {
         let emit::Artifact::Expr(rules) =
             emit::emit(&ir, &ParamValues::default(), emit::Target::Expr);
         assert_eq!(rules[0].action, "retreat-damaged-units(0.5)");
+    }
+
+    /// Go's `baseDefenseFloorClause`: a conjunct that is only partly settled by
+    /// the doctrine. Folding alone leaves `0 <= 0 || RoleCount(...) >= 0`,
+    /// which Go does not emit at all.
+    #[test]
+    fn a_partly_static_conjunct_collapses() {
+        let src = "param floor: int\n\
+                   rule attack {\n priority 1\n category combat\n \
+                   do squad-attack-move(ground-attack)\n \
+                   require squad-exists(ground-attack)\n \
+                   require floor <= 0 or role-count(pillbox) >= floor\n}\n";
+        let (tokens, _) = lexer::lex(src);
+        let (ast, pd) = parser::parse(&tokens);
+        assert!(pd.is_empty(), "{pd:?}");
+
+        for (floor, want) in [
+            // The disjunct holds outright, so the clause is gone.
+            (0, "SquadExists(\"ground-attack\")"),
+            // It cannot be settled, so it stays — without the dead `2 <= 0`.
+            (
+                2,
+                "SquadExists(\"ground-attack\") && RoleCount(\"pillbox\") >= 2",
+            ),
+        ] {
+            let mut ir = check::check(&ast).expect("checks").ir;
+            let params = ParamValues::bind(
+                &ir,
+                &HashMap::from([("floor".to_string(), f64::from(floor))]),
+            )
+            .expect("binds");
+            specialise(&mut ir, &params);
+            let emit::Artifact::Expr(rules) = emit::emit(&ir, &params, emit::Target::Expr);
+            assert_eq!(rules[0].condition, want, "floor {floor}");
+        }
+    }
+
+    /// `validate` runs where these checks now live: after a doctrine, so the
+    /// priorities are numbers.
+    fn warnings(src: &str) -> Vec<String> {
+        warnings_with(src, &HashMap::new())
+    }
+
+    fn warnings_with(src: &str, doctrine: &HashMap<String, f64>) -> Vec<String> {
+        let (tokens, ld) = lexer::lex(src);
+        assert!(ld.is_empty(), "{ld:?}");
+        let (ast, pd) = parser::parse(&tokens);
+        assert!(pd.is_empty(), "{pd:?}");
+        let mut ir = check::check(&ast).expect("checks").ir;
+        let params = ParamValues::bind(&ir, doctrine).expect("binds");
+        specialise(&mut ir, &params);
+        validate(&ir, &params)
+            .into_iter()
+            .map(|d| d.message)
+            .collect()
+    }
+
+    #[test]
+    fn equal_priorities_in_one_category_are_reported() {
+        let e = warnings(
+            "rule a {\n priority 5\n category economy\n do scout\n require cash >= 1\n}\n\
+             rule b {\n priority 5\n category economy\n do scout\n require cash >= 2\n}\n",
+        );
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(e[0].contains("share priority 5"), "{e:?}");
+    }
+
+    #[test]
+    fn equal_priorities_in_different_categories_are_fine() {
+        let e = warnings(
+            "rule a {\n priority 5\n category economy\n do scout\n require cash >= 1\n}\n\
+             rule b {\n priority 5\n category combat\n do scout\n require cash >= 2\n}\n",
+        );
+        assert!(e.is_empty(), "{e:?}");
+    }
+
+    /// The reason these moved out of `check`. Two `lerp` priorities are only
+    /// equal once a doctrine says what they are, so this was silent before.
+    #[test]
+    fn a_collision_between_doctrine_set_priorities_is_found() {
+        let src = "param aggression: float\n\
+                   rule a {\n priority lerp(200, 400, aggression)\n category combat\n \
+                   do squad-attack-move(ground-attack)\n require cash >= 1\n}\n\
+                   rule b {\n priority lerp(200, 400, aggression)\n category combat\n \
+                   do squad-defend(ground-attack)\n require cash >= 2\n}\n";
+        let e = warnings_with(src, &HashMap::from([("aggression".to_string(), 0.5)]));
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(e[0].contains("share priority 300"), "{e:?}");
+
+        // And a doctrine that separates them is not a collision at all, which is
+        // the case no source-level check could ever decide.
+        let src = "param aggression: float\n\
+                   rule a {\n priority lerp(200, 400, aggression)\n category combat\n \
+                   do squad-attack-move(ground-attack)\n require cash >= 1\n}\n\
+                   rule b {\n priority 300\n category combat\n \
+                   do squad-defend(ground-attack)\n require cash >= 2\n}\n";
+        let e = warnings_with(src, &HashMap::from([("aggression".to_string(), 0.9)]));
+        assert!(e.is_empty(), "{e:?}");
+    }
+
+    #[test]
+    fn a_rule_under_a_broader_exclusive_one_can_never_fire() {
+        // `a` requires strictly less than `b`, so whenever `b` would fire `a`
+        // already has, and `a` is exclusive.
+        let e = warnings(
+            "rule a {\n priority 9\n category economy exclusive\n do scout\n \
+             require cash >= 1\n}\n\
+             rule b {\n priority 5\n category economy\n do scout\n \
+             require cash >= 1\n require has-role(barracks)\n}\n",
+        );
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(e[0].contains("can never fire"), "{e:?}");
+    }
+
+    #[test]
+    fn shadowing_is_found_whichever_order_the_rules_appear() {
+        // "Higher" means priority, not position, so both orderings must report.
+        let hi = "rule a {\n priority 9\n category economy exclusive\n do scout\n \
+                  require cash >= 1\n}\n";
+        let lo = "rule b {\n priority 5\n category economy\n do scout\n \
+                  require cash >= 1\n require has-role(barracks)\n}\n";
+        let forward = warnings(&format!("{hi}{lo}"));
+        let reversed = warnings(&format!("{lo}{hi}"));
+        assert_eq!(forward.len(), 1, "{forward:?}");
+        assert_eq!(reversed.len(), 1, "low-priority rule first: {reversed:?}");
+        assert_eq!(forward, reversed);
+    }
+
+    #[test]
+    fn a_narrower_rule_above_does_not_shadow() {
+        // `a` requires *more* than `b`, so `b` can still fire on its own.
+        let e = warnings(
+            "rule a {\n priority 9\n category economy exclusive\n do scout\n \
+             require cash >= 1\n require has-role(barracks)\n}\n\
+             rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n}\n",
+        );
+        assert!(e.is_empty(), "{e:?}");
+    }
+
+    #[test]
+    fn a_non_exclusive_rule_above_does_not_shadow() {
+        let e = warnings(
+            "rule a {\n priority 9\n category economy\n do scout\n require cash >= 1\n}\n\
+             rule b {\n priority 5\n category economy\n do scout\n \
+             require cash >= 1\n require has-role(barracks)\n}\n",
+        );
+        assert!(e.is_empty(), "{e:?}");
+    }
+
+    /// Comparing the IR rather than the source makes this stricter in the useful
+    /// direction: `count(powr)` and `building-count(powr)` are one conjunct.
+    #[test]
+    fn shadowing_sees_through_two_spellings_of_one_conjunct() {
+        let e = warnings(
+            "rule a {\n priority 9\n category economy exclusive\n do scout\n \
+             require count(powr) > 0\n}\n\
+             rule b {\n priority 5\n category economy\n do scout\n \
+             require building-count(powr) > 0\n require has-role(barracks)\n}\n",
+        );
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(e[0].contains("can never fire"), "{e:?}");
     }
 }

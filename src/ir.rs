@@ -103,6 +103,9 @@ pub struct IrRule {
     pub lets: Vec<IrExpr>,
     /// Implicitly ANDed.
     pub requires: Vec<IrExpr>,
+    /// Kept apart from `span` so a whole-set diagnostic can point at the name
+    /// rather than underlining the entire rule.
+    pub name_span: Span,
     pub span: Span,
 }
 
@@ -139,6 +142,9 @@ pub struct IrExpr {
 pub enum IrExprKind {
     Int(i64),
     Float(f64),
+    /// Only ever produced by folding — the language has no boolean literal, but
+    /// a gate that a doctrine settles has to become one.
+    Bool(bool),
 
     /// A resolved predicate and its lowered arguments. `count` never survives
     /// lowering — it becomes whichever of the three it meant.

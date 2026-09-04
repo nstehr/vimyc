@@ -84,6 +84,7 @@ pub(crate) fn static_eval(e: &IrExpr, params: &ParamValues) -> Value {
     match &e.kind {
         IrExprKind::Int(n) => Value::Int(*n),
         IrExprKind::Float(f) => Value::Float(*f),
+        IrExprKind::Bool(b) => Value::Bool(*b),
         IrExprKind::Param(slot) => param_value(params, *slot),
         IrExprKind::Builtin(id, args) => {
             let args: Vec<Value> = args.iter().map(|a| static_eval(a, params)).collect();
@@ -192,6 +193,7 @@ impl<'a> Evaluator<'a> {
         match &e.kind {
             IrExprKind::Int(n) => Value::Int(*n),
             IrExprKind::Float(f) => Value::Float(*f),
+            IrExprKind::Bool(b) => Value::Bool(*b),
             IrExprKind::Binding(slot) => self.scope[*slot as usize],
             IrExprKind::Param(slot) => param_value(self.params, *slot),
             IrExprKind::Builtin(id, args) => {

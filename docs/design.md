@@ -400,6 +400,20 @@ It matters beyond tidiness. Comparing against real rule sets is the acceptance
 test for this whole design, and that compares rule *sets* — a rule Go never
 emitted cannot be matched by one that is present but never fires.
 
+A gate is often only *part* of a conjunct — Go appends a clause conditionally,
+which reads as `floor <= 0 or role-count(pillbox) >= floor`. Folding alone leaves
+`0 <= 0 || RoleCount("pillbox") >= 0`, so `specialise` also absorbs constants
+through `and` and `or`: `true || x` is `true`, `false || x` is `x`. That needs a
+boolean the IR can hold, which is why `IrExprKind::Bool` exists despite the
+language having no boolean literal.
+
+The whole-set checks moved here for the same reason. `check_priority_collisions`
+and `check_shadowed_rules` compare priorities, and once a doctrine can set one
+they skipped every rule whose priority was a `lerp` — which after a port of
+`CompileDoctrine` is nearly all of them. `specialise::validate` runs where the
+numbers exist. Comparing the IR rather than the source also made shadowing
+stricter: `count(powr)` and `building-count(powr)` are one conjunct there.
+
 One consequence worth knowing: a rule that was nothing but its gate ends up with
 no conjuncts at all, and expr will not compile an empty condition. The emitter
 writes `true` for it. The same hole was already reachable by writing a rule with
