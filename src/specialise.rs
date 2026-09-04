@@ -1,15 +1,10 @@
 //! The fold-time pass: a rule set plus a doctrine, minus everything that
 //! doctrine settles.
 //!
-//! `CompileDoctrine` decides in Go which rules to emit at all, so a rule set for
-//! a land doctrine simply has no naval rules in it. Parameters move that
-//! decision into the language as an ordinary `require`, which means the
-//! comparison survives folding — `0.4 >= 0.3 && ...` — and a rule whose gate is
-//! false becomes a rule that never fires rather than a rule that is not there.
-//!
-//! This restores the difference. It is the second half of what a `param` is for:
-//! `emit` turns a parameter into a number, and this turns what that number
-//! decided into structure.
+//! Go decides which rules to emit at all, so a land doctrine's rule set simply
+//! has no naval rules. A `param` moves that decision into the language as an
+//! ordinary `require`, and without this pass the comparison would survive
+//! folding — a rule that never fires rather than a rule that is not there.
 
 use crate::ast::BinOp;
 use crate::diag::Diagnostic;
@@ -18,12 +13,11 @@ use crate::ir::{Ir, IrExpr, IrExprKind, IrRule, ParamValues};
 
 /// Applies a doctrine, dropping what it rules out.
 ///
-/// A conjunct that depends only on parameters is decided here: false drops the
-/// rule, true drops the conjunct. Everything that reads game state is left
-/// exactly as it was, because only a tick can answer it.
+/// A conjunct decidable from parameters alone is settled here: false drops the
+/// rule, true drops the conjunct. Anything reading game state is untouched.
 ///
-/// In place rather than returning a new `Ir`: this only ever removes, and
-/// rebuilding the tree to do that would need `Clone` on every node for no gain.
+/// In place because this only ever removes; rebuilding would need `Clone` on
+/// every node for no gain.
 pub fn specialise(ir: &mut Ir, params: &ParamValues) {
     ir.rules.retain_mut(|rule| {
         for binding in &mut rule.lets {
@@ -31,9 +25,8 @@ pub fn specialise(ir: &mut Ir, params: &ParamValues) {
         }
         let mut alive = true;
         rule.requires.retain_mut(|conjunct| {
-            // Once the rule is doomed, leave the rest alone — it is about to be
-            // dropped, and simplifying further could only mislead a reader of
-            // the result.
+            // The rule is about to be dropped; simplifying the rest would only
+            // mislead whoever reads the result.
             if !alive {
                 return true;
             }
@@ -53,18 +46,10 @@ pub fn specialise(ir: &mut Ir, params: &ParamValues) {
 
 /// Folds what the doctrine settles, in place.
 ///
-/// Two steps, and the second is why the first is not enough. A subtree that
-/// reads nothing but parameters becomes the value it has. Then `and` and `or`
-/// absorb whichever side that produced, which is what turns Go's conditionally
-/// appended clause —
-///
-/// ```text
-/// require base-defense-floor <= 0 or role-count(pillbox) >= base-defense-floor
-/// ```
-///
-/// — into nothing at all when the floor is zero, rather than into
-/// `0 <= 0 || RoleCount("pillbox") >= 0`. Go does not emit that clause, so
-/// neither can this.
+/// The absorption step is why folding alone is not enough. Go appends a clause
+/// conditionally, which reads here as `floor <= 0 or role-count(pillbox) >=
+/// floor`; folding leaves `0 <= 0 || RoleCount("pillbox") >= 0`, where Go emits
+/// no clause at all.
 fn simplify(e: &mut IrExpr, params: &ParamValues) {
     if is_static(e) {
         let span = e.span;
@@ -102,13 +87,8 @@ fn simplify(e: &mut IrExpr, params: &ParamValues) {
 /// `true && x` is `x`, `false || x` is `x`, and the other two settle the whole
 /// expression. `None` when neither side is a constant.
 fn absorb(op: BinOp, l: &mut IrExpr, r: &mut IrExpr) -> Option<IrExprKind> {
-    let take = |side: &mut IrExpr| {
-        std::mem::replace(
-            &mut side.kind,
-            // Any placeholder: the node it came from is being discarded.
-            IrExprKind::Bool(false),
-        )
-    };
+    // The placeholder is arbitrary: the node it replaces is being discarded.
+    let take = |side: &mut IrExpr| std::mem::replace(&mut side.kind, IrExprKind::Bool(false));
     match (op, as_bool(l), as_bool(r)) {
         (BinOp::And, Some(false), _) | (BinOp::And, _, Some(false)) => {
             Some(IrExprKind::Bool(false))
@@ -129,13 +109,9 @@ fn as_bool(e: &IrExpr) -> Option<bool> {
 
 /// Whether this expression can be decided without game state.
 ///
-/// The IR counterpart of `check`'s `Phase::Static`, and it has to agree with it:
-/// the checker uses that rule to decide what a priority may contain, and this
-/// uses it to decide what folds. The two lists are the same three node kinds.
-///
-/// A binding counts as non-static even when its value is. `let` is rule-scoped
-/// and resolving one here would mean carrying the scope through the walk, for a
-/// case no real rule set has: a doctrine gate written through a binding.
+/// Must agree with `check`'s `Phase::Static` — same three node kinds. A binding
+/// counts as non-static even when its value is: resolving one would mean
+/// carrying the rule scope through the walk, for a case no rule set has.
 pub(crate) fn is_static(e: &IrExpr) -> bool {
     match &e.kind {
         IrExprKind::Int(_) | IrExprKind::Float(_) | IrExprKind::Bool(_) => true,
@@ -149,13 +125,9 @@ pub(crate) fn is_static(e: &IrExpr) -> bool {
 
 /// The checks that need a whole rule set *and* its doctrine.
 ///
-/// These used to run in `check`, where a priority is still an expression — so
-/// once a doctrine could set one, they silently skipped every rule whose
-/// priority was a `lerp`, which after a port of `CompileDoctrine` is nearly all
-/// of them. Here the numbers exist.
-///
-/// Warnings, not errors: both describe a rule set that runs and is probably not
-/// what was meant.
+/// They compare priorities, so in `check` they silently skipped every rule whose
+/// priority was a `lerp` — after the port, nearly all of them. Warnings rather
+/// than errors: both describe a rule set that runs and is probably wrong.
 pub fn validate(ir: &Ir, params: &ParamValues) -> Vec<Diagnostic> {
     let resolved: Vec<(i64, &IrRule)> = ir
         .rules
@@ -171,10 +143,9 @@ pub fn validate(ir: &Ir, params: &ParamValues) -> Vec<Diagnostic> {
 
 /// Two rules sharing a category and a priority.
 ///
-/// Go sorts by priority with `sort.Slice`, which is not stable, so equal
-/// priorities order arbitrarily. Within a category that decides which of the two
-/// an exclusive rule blocks — a coin flip that can land differently between runs
-/// of the same rule set.
+/// Go's `sort.Slice` is not stable, so equal priorities order arbitrarily —
+/// within a category that decides which of the two an exclusive rule blocks, and
+/// can land differently between runs of the same rule set.
 fn collisions(rules: &[(i64, &IrRule)], diags: &mut Vec<Diagnostic>) {
     for (i, (pa, a)) in rules.iter().enumerate() {
         for (pb, b) in &rules[i + 1..] {
@@ -194,13 +165,10 @@ fn collisions(rules: &[(i64, &IrRule)], diags: &mut Vec<Diagnostic>) {
 /// A rule that can never fire because an exclusive rule above it always fires
 /// first.
 ///
-/// Sound but deliberately narrow: if the higher rule's conjuncts are a subset of
-/// the lower one's, then whenever the lower rule's conditions hold the higher
-/// one's do too. Anything cleverer needs implication rather than containment,
-/// which needs a solver.
+/// Sound but narrow: containment of conjuncts, not implication. Anything
+/// cleverer needs a solver.
 fn shadowed(rules: &[(i64, &IrRule)], diags: &mut Vec<Diagnostic>) {
-    // Every pair, not just earlier ones: "higher" is decided by priority, and
-    // the engine sorts by priority regardless of where a rule sits in the file.
+    // Every pair, not just earlier ones: "higher" means priority, not position.
     for (i, (lp, lower)) in rules.iter().enumerate() {
         for (j, (hp, higher)) in rules.iter().enumerate() {
             if i == j || !higher.exclusive || higher.category != lower.category || hp <= lp {
@@ -221,11 +189,8 @@ fn shadowed(rules: &[(i64, &IrRule)], diags: &mut Vec<Diagnostic>) {
     }
 }
 
-/// Structural equality, ignoring spans.
-///
-/// On the IR rather than the AST, which makes it stricter in the useful
-/// direction: names are already resolved, so `count(powr)` and
-/// `building-count(powr)` are the same conjunct here and were not before.
+/// Structural equality, ignoring spans. On the IR, so `count(powr)` and
+/// `building-count(powr)` are one conjunct.
 fn same_expr(a: &IrExpr, b: &IrExpr) -> bool {
     match (&a.kind, &b.kind) {
         (IrExprKind::Int(x), IrExprKind::Int(y)) => x == y,

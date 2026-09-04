@@ -18,16 +18,15 @@ fn main() {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     const USAGE: &str = "usage: vimyc <file> [state.json] [--json] [--params <file>|-]";
 
-    // Explicit rather than scanning for flags: `--params` with nothing after it
-    // used to index past the end, and stray positional arguments were dropped
-    // without a word.
+    // Explicit rather than scanning: `--params` with nothing after it used to
+    // index past the end, and stray positional arguments vanished silently.
     let mut emit_json = false;
     let mut params_path: Option<String> = None;
     let mut positional: Vec<String> = Vec::new();
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            // Emitting is silent on stdout apart from the artifact, so it can be
+            // stdout carries the artifact and nothing else, so it can be
             // redirected straight into a generated file.
             "--json" => emit_json = true,
             // A flat object of parameter name to number.
@@ -64,8 +63,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (ast, parse_diags) = parse(&tokens);
     report(&src, &parse_diags);
 
-    // Type errors off the back of a syntax error are noise — the tree is full of
-    // holes the parser already reported.
+    // Type errors after a syntax error are noise: the tree is full of holes the
+    // parser already reported.
     let errors = lex_diags.len() + parse_diags.len();
     if errors > 0 {
         return Err(format!("{errors} error(s)").into());
@@ -100,11 +99,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut checked = checked;
     let params = vimyc::ir::ParamValues::bind(&checked.ir, &supplied)?;
-    // Applied before anything reads the rule set, so `--json` and an evaluation
-    // see the same rules the doctrine actually leaves behind.
+    // Before anything reads the rule set, so `--json` and an evaluation see the
+    // same rules.
     vimyc::specialise::specialise(&mut checked.ir, &params);
-    // After specialising, not before: these compare priorities, and a
-    // doctrine-set priority is not a number until now.
+    // After specialising: these compare priorities, and a doctrine-set priority
+    // is not a number until now.
     report(&src, &vimyc::specialise::validate(&checked.ir, &params));
 
     if emit_json {

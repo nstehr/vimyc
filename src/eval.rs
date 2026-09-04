@@ -1,11 +1,9 @@
-//! Tree-walking interpreter over `Ir`.
+//! Tree-walking interpreter over `Ir`, and the oracle for any later backend:
+//! two implementations agreeing on the whole corpus beats reading bytecode.
 //!
-//! Also the oracle for any later backend: two implementations that must agree on
-//! the whole corpus is a better property test than reading bytecode.
-//!
-//! Runs on lowered rules, so there are no names left to resolve and no `count`
-//! to disambiguate — every remaining failure would be a compiler bug rather than
-//! bad input, which is why nothing here reports a diagnostic.
+//! Runs on lowered rules, so nothing is left to resolve — every remaining
+//! failure is a compiler bug rather than bad input, which is why nothing here
+//! reports a diagnostic.
 
 use crate::ast::{BinOp, UnOp};
 use crate::env::{self, Predicate};
@@ -19,8 +17,8 @@ pub enum Value {
     Int(i64),
     Float(f64),
     Bool(bool),
-    /// Whether an optional is present. The payload is unreachable from the
-    /// language, so there is nothing to carry.
+    /// Whether an optional is present; the payload is unreachable from the
+    /// language.
     Opt(bool),
 }
 
@@ -32,14 +30,13 @@ pub struct Firing<'a> {
 
 /// Runs a rule set against one state.
 ///
-/// A faithful port of Go's `Evaluate`, including the part that matters most for
-/// agreement: a rule in a category already claimed by an exclusive rule is
-/// **skipped without being evaluated**. Evaluating it anyway would give the same
-/// firings but a different count of predicate calls, which the differential test
-/// would notice.
+/// A rule in a category already claimed by an exclusive rule is **skipped
+/// without being evaluated**, as in Go. Evaluating it anyway would give the same
+/// firings but a different count of predicate calls, which the differential
+/// notices.
 pub fn evaluate<'a>(ir: &'a Ir, params: &ParamValues, state: &State) -> Firing<'a> {
-    // Resolved once, not per rule: a priority sees only parameters, which do not
-    // change within a doctrine window. This is the first of the two phases.
+    // Once, not per rule: a priority sees only parameters, and those are fixed
+    // within a doctrine window.
     let mut order: Vec<(i64, &IrRule)> =
         ir.rules.iter().map(|r| (priority(r, params), r)).collect();
     order.sort_by_key(|(p, _)| Reverse(*p));
@@ -64,10 +61,8 @@ pub fn evaluate<'a>(ir: &'a Ir, params: &ParamValues, state: &State) -> Firing<'
     firing
 }
 
-/// A rule's priority, resolved against a doctrine.
-///
-/// Separate from `rule_fires` because the phases are separate: this runs once
-/// when a doctrine lands, that runs every tick.
+/// A rule's priority, resolved against a doctrine — once when the doctrine
+/// lands, where `rule_fires` runs every tick.
 pub fn priority(rule: &IrRule, params: &ParamValues) -> i64 {
     match static_eval(&rule.priority, params) {
         Value::Int(n) => n,
@@ -77,9 +72,8 @@ pub fn priority(rule: &IrRule, params: &ParamValues) -> i64 {
 
 /// Evaluates an expression that reads no state.
 ///
-/// Takes no `State`, which is the phase separation made structural rather than
-/// promised: a priority physically cannot consult the game. The arms it does not
-/// handle are the ones `check` rejects in `Phase::Static`.
+/// Takes no `State`, so the phase separation is structural rather than promised.
+/// The arms it omits are the ones `check` rejects in `Phase::Static`.
 pub(crate) fn static_eval(e: &IrExpr, params: &ParamValues) -> Value {
     match &e.kind {
         IrExprKind::Int(n) => Value::Int(*n),
@@ -91,9 +85,8 @@ pub(crate) fn static_eval(e: &IrExpr, params: &ParamValues) -> Value {
             apply_builtin(*id, &args)
         }
         IrExprKind::Unary(op, operand) => unary(*op, static_eval(operand, params)),
-        // `and` and `or` are handled here rather than in `binary` for the same
-        // reason as in the tick evaluator: they short-circuit, which an already
-        // evaluated pair of operands cannot.
+        // Here rather than in `binary` because they short-circuit, which an
+        // already evaluated pair of operands cannot.
         IrExprKind::Binary(op, l, r) => match op {
             BinOp::And => Value::Bool(
                 expect_bool(static_eval(l, params)) && expect_bool(static_eval(r, params)),
@@ -112,7 +105,7 @@ fn param_value(params: &ParamValues, slot: u32) -> Value {
     match params.values.get(slot as usize) {
         Some(ParamValue::Int(n)) => Value::Int(*n),
         Some(ParamValue::Float(f)) => Value::Float(*f),
-        // A caller supplied fewer values than the rule set declares. Not a
+        // Fewer values than the rule set declares: a caller error, not a
         // compiler bug, but nothing here can carry on without a number.
         None => panic!("no value for parameter slot {slot}"),
     }
@@ -124,26 +117,23 @@ fn apply_builtin(id: env::Builtin, args: &[Value]) -> Value {
     match (id, args) {
         (env::Builtin::Lerp, [min, max, t]) => {
             let (min, max) = (as_f64(*min), as_f64(*max));
-            // Saturating, like every other integer path here: a doctrine is not
-            // trusted to keep the arithmetic in range.
+            // Saturating, like every integer path here.
             Value::Int((min + ((max - min) * as_f64(*t)).round()) as i64)
         }
         (env::Builtin::Lerpf, [min, max, t]) => {
             let (min, max) = (as_f64(*min), as_f64(*max));
-            // Fused, because Go's is. The spec lets a Go implementation contract
-            // `min + (max-min)*t` into one operation, and on arm64 it does — one
-            // rounding instead of two, so `lerpf(0.05, 0.15, 0.6)` is 0.11 there
-            // and 0.10999999999999999 with separate operations.
+            // Fused, because Go's is: the spec permits contracting
+            // `min + (max-min)*t` and on arm64 it does. One rounding instead of
+            // two, so `lerpf(0.05, 0.15, 0.6)` is 0.11 rather than
+            // 0.10999999999999999.
             Value::Float((max - min).mul_add(as_f64(*t), min))
         }
         (env::Builtin::Max, [a, b]) => Value::Float(as_f64(*a).max(as_f64(*b))),
         (env::Builtin::Min, [a, b]) => Value::Float(as_f64(*a).min(as_f64(*b))),
-        // Toward zero, like Go's `int(x)`, and saturating like every other
-        // integer path here.
+        // Toward zero, like Go's `int(x)`.
         (env::Builtin::Trunc, [x]) => Value::Int(as_f64(*x).trunc() as i64),
-        // Go's `%.2f`: a correctly rounded decimal conversion with ties to
-        // even, which `{:.2}` also does. Scaling by 100 and rounding does not
-        // agree — it takes 0.125 to 0.13 where Go gives 0.12.
+        // Go's `%.2f`: correctly rounded with ties to even, which `{:.2}` also
+        // does. Scaling by 100 and rounding takes 0.125 to 0.13, Go to 0.12.
         (env::Builtin::Round2, [x]) => Value::Float(
             format!("{:.2}", as_f64(*x))
                 .parse()
@@ -173,9 +163,8 @@ pub fn rule_fires(rule: &IrRule, params: &ParamValues, state: &State) -> bool {
 
 /// Whether each `require` holds, evaluated independently.
 ///
-/// Deliberately does **not** short-circuit, unlike `rule_fires`: this exists to
-/// measure which conjuncts a corpus actually exercises, and a conjunct never
-/// reached tells you nothing about whether it works.
+/// Deliberately does **not** short-circuit: this measures which conjuncts a
+/// corpus exercises, and one never reached says nothing about whether it works.
 pub fn conjuncts(rule: &IrRule, params: &ParamValues, state: &State) -> Vec<bool> {
     let ev = Evaluator::for_rule(rule, params, state);
     rule.requires
@@ -184,10 +173,8 @@ pub fn conjuncts(rule: &IrRule, params: &ParamValues, state: &State) -> Vec<bool
         .collect()
 }
 
-/// One rule's evaluation.
-///
-/// Mirrors `RuleChecker`: the scope is born and dropped with the rule, so a
-/// binding cannot leak into the next one.
+/// One rule's evaluation. Like `RuleChecker`, the scope is born and dropped
+/// with the rule, so a binding cannot leak into the next.
 struct Evaluator<'a> {
     state: &'a State,
     #[allow(dead_code, reason = "read once `Param` and `Builtin` are evaluated")]

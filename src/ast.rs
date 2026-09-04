@@ -17,9 +17,8 @@ pub struct Ast {
 
 /// A `def`: one expression, given a name and some arguments.
 ///
-/// The language's only abstraction, and it exists for one shape — Go's
-/// `buildCashCondition`, whose five conditional clauses appear at twenty-one
-/// call sites differing only in a unit cost.
+/// The language's only abstraction, added for Go's `buildCashCondition` — five
+/// conditional clauses at twenty-one call sites differing only in a unit cost.
 #[derive(Debug)]
 pub struct Def {
     pub name: Name,

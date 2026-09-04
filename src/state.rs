@@ -1,25 +1,18 @@
 //! Game state, as a condition can observe it.
 //!
-//! A projection of Go's `RuleEnv`, not of `model.GameState`. `GameState` is the
-//! raw wire format from the C# mod; `RuleEnv` is that plus `Memory`, terrain and
-//! doctrine preferences. Every entry here answers "what does this env method
-//! return", regardless of where Go got the answer.
-//!
-//! That is what keeps `Memory` entirely on the Go side. Squad membership and
-//! enemy intel live there and mutate as a tick runs; vimyc receives only the
-//! resolved facts and never models the mutation. See `docs/design.md`,
+//! A projection of Go's `RuleEnv`, not of `model.GameState`: every entry answers
+//! "what does this env method return", regardless of where Go got the answer.
+//! That is what keeps `Memory` — squad membership, enemy intel, all of it
+//! mutating mid-tick — entirely on the Go side. See `docs/design.md`,
 //! "Evaluation semantics".
 //!
-//! Keyed by predicate rather than one field per concept. With 64 predicates and
-//! more coming, named fields would put the hand-maintenance the manifest exists
-//! to remove straight back into this file — adding a predicate would touch
-//! `State`, the Go projector and `eval::apply`. Keyed, it touches none of them.
-//! The cost is that a state is harder to read by eye; `Display` is the
-//! consolation.
+//! Keyed by predicate rather than one field per concept. Named fields would put
+//! the hand-maintenance the manifest exists to remove back into this file:
+//! adding a predicate would touch `State`, the Go projector and `eval::apply`.
+//! The cost is a state that is harder to read by eye, which `Display` answers.
 //!
-//! Absence is meaningful throughout: a flag not present is false, a count not
-//! present is zero. That keeps fixtures small and matches how a partial
-//! observation of a game actually looks.
+//! Absence is meaningful: a flag not present is false, a count not present is
+//! zero.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

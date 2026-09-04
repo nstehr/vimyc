@@ -52,12 +52,10 @@ pub enum Type {
 
     /// `exists` is the only thing that consumes one; it is not a `Bool`.
     ///
-    /// `&'static` rather than `Box` so signatures can live in a `const` table —
-    /// `Box::new` is not const. Nothing builds an optional at runtime.
+    /// `&'static` rather than `Box` so signatures can live in a `const` table.
     Option(&'static Type),
 
-    /// Only ever counted; the element type is unmodelled because nothing can
-    /// reach an element.
+    /// Only ever counted; nothing can reach an element.
     Collection,
 
     /// Compatible with everything, so one mistake reports once rather than
@@ -68,10 +66,9 @@ pub enum Type {
 impl Type {
     /// Whether a value of this type is acceptable where `other` is expected.
     ///
-    /// An `Int` widens to a `Float`, and only that way: `lerp` returns an
-    /// integer and `max` takes floats, so `max(745.0, lerp(600, 700, w))` is the
-    /// ordinary shape rather than an error. Evaluation already treats the two as
-    /// one through `as_f64`; this makes the checker agree.
+    /// An `Int` widens to a `Float`, one way only: `lerp` returns an integer and
+    /// `max` takes floats, so `max(745.0, lerp(600, 700, w))` is the ordinary
+    /// shape. Evaluation already treats the two as one through `as_f64`.
     pub fn compatible(&self, other: &Type) -> bool {
         matches!(self, Type::Error)
             || matches!(other, Type::Error)

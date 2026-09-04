@@ -1,13 +1,10 @@
 //! Emitting expr source, which Vimy's engine already runs.
 //!
-//! The inverse of `vimy-core/rules/translate.go`, and the reason it is the first
-//! backend: Go's evaluation path is unchanged, so everything the differential
-//! already verified stays verified.
+//! The inverse of `vimy-core/rules/translate.go`, and the first backend because
+//! Go's evaluation path is unchanged by it.
 //!
-//! This is the one place Go's spellings appear. `docs/design.md` keeps the
-//! language uniformly kebab and puts the conversion on emission — so predicates
-//! become PascalCase methods here, roles become snake, and nothing upstream has
-//! to know.
+//! The one place Go's spellings appear: the language is uniformly kebab and the
+//! conversion happens here, so nothing upstream has to know.
 
 use crate::ast::{BinOp, UnOp};
 use crate::emit::RuleSource;
@@ -20,10 +17,9 @@ pub fn emit(ir: &Ir, params: &ParamValues) -> Vec<RuleSource> {
 }
 
 fn emit_rule(rule: &IrRule, params: &ParamValues) -> RuleSource {
-    // A rule with no conjuncts is vacuously true, and expr will not compile an
-    // empty string — `unexpected token EOF`. Reachable two ways: a rule written
-    // without any `require`, and one whose every conjunct was a doctrine gate
-    // that `specialise` folded away.
+    // Vacuously true, and expr will not compile an empty string
+    // (`unexpected token EOF`). Reached by a rule with no `require`, and by one
+    // whose every conjunct was a gate `specialise` folded away.
     let mut condition = if rule.requires.is_empty() {
         "true".to_string()
     } else {
@@ -33,8 +29,8 @@ fn emit_rule(rule: &IrRule, params: &ParamValues) -> RuleSource {
         if i > 0 {
             condition.push_str(" && ");
         }
-        // Each `require` is a conjunct, so it sits at `&&`'s precedence and
-        // parenthesises itself if it is looser.
+        // A conjunct sits at `&&`'s precedence, so it parenthesises itself if
+        // it is looser.
         emit_expr(require, rule, params, PREC_AND, &mut condition);
     }
 
@@ -49,12 +45,9 @@ fn emit_rule(rule: &IrRule, params: &ParamValues) -> RuleSource {
     }
 }
 
-/// A predicate's argument.
-///
-/// Folded rather than emitted as an expression: an argument is static by the
-/// checker's rule, and Go keys a recorded call by the literal in its source — so
-/// `DamagedCombatUnits(0.5)` is what the projection can answer and
-/// `DamagedCombatUnits((0.25 + 0.25))` is not.
+/// A predicate's argument, folded rather than emitted as an expression: Go keys
+/// a recorded call by the literal in its source, so the projection can answer
+/// `DamagedCombatUnits(0.5)` and not `DamagedCombatUnits((0.25 + 0.25))`.
 fn emit_arg(e: &IrExpr, rule: &IrRule, params: &ParamValues, out: &mut String) {
     match &e.kind {
         IrExprKind::Member(..) => emit_expr(e, rule, params, PREC_ATOM, out),
@@ -104,9 +97,9 @@ fn emit_bare(e: &IrExpr, rule: &IrRule, params: &ParamValues, out: &mut String) 
         IrExprKind::Float(f) => out.push_str(&crate::state::render_number(*f)),
         IrExprKind::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
 
-        // Folded to the number the doctrine supplied. The other binding time —
-        // the engine answering `Aggression()` at evaluation time — would emit a
-        // call here instead; `docs/design.md` covers why that stays open.
+        // The other binding time — the engine answering `Aggression()` per
+        // tick — would emit a call here; `docs/design.md` covers why it stays
+        // open.
         IrExprKind::Param(_) | IrExprKind::Builtin(..) => out.push_str(&fold(e, params)),
         IrExprKind::Member(domain, index) => out.push_str(env::member_name(*domain, *index)),
         IrExprKind::Binding(slot) => emit_bare(&rule.lets[*slot as usize], rule, params, out),
@@ -245,18 +238,16 @@ fn emit_expr(e: &IrExpr, rule: &IrRule, params: &ParamValues, parent: u8, out: &
 
 /// expr has no bindings, so one is replaced by what it was bound to.
 ///
-/// Terminates because bindings are rule-scoped and may only refer to earlier
-/// ones. A binding used twice is emitted twice, which is why `let` is worth
-/// keeping in the source even though it vanishes here.
+/// Terminates because a binding may only refer to earlier ones. Used twice, it
+/// is emitted twice — `let` earns its place in the source, not the output.
 fn emit_binding(rule: &IrRule, params: &ParamValues, slot: u32, parent: u8, out: &mut String) {
     emit_expr(&rule.lets[slot as usize], rule, params, parent, out);
 }
 
-/// Predicates whose Go spelling capitalises an acronym, which no rule can
-/// recover from the kebab name — `apcs` could be `Apcs` or `APCs`.
+/// Predicates whose Go spelling capitalises an acronym: `apcs` could be `Apcs`
+/// or `APCs`, and nothing recovers that from the kebab name.
 ///
-/// `go_name_matches_the_manifest` holds this to exactly the set that needs it,
-/// so an entry cannot go stale and a new acronym cannot be forgotten.
+/// `go_name_matches_the_manifest` holds this to exactly the set that needs it.
 pub const ACRONYMS: &[(&str, &str)] = &[
     ("idle-combat-loaded-apcs", "IdleCombatLoadedAPCs"),
     ("idle-empty-apcs", "IdleEmptyAPCs"),

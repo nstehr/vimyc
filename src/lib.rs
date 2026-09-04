@@ -1,7 +1,8 @@
 //! A typed language for Vimy's AI rule conditions.
 //!
 //! ```text
-//! source ──lexer──> tokens ──parser──> ast ──types──> checked ast ──eval──> bool
+//! source ──lexer──> tokens ──parser──> ast ──check──> ir ──┬──eval──> bool
+//!                                                          └──emit──> expr
 //! ```
 //!
 //! Design decisions live in `docs/design.md`; how it is put together, and the

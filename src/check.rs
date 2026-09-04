@@ -10,8 +10,8 @@ use crate::env;
 use crate::ir::Ir;
 use crate::types::{Domain, ParamType, Type};
 
-/// The result of a successful check: a rule set that can be lowered, plus
-/// anything worth saying about it that did not stop it.
+/// A rule set that can be lowered, plus anything worth saying that did not stop
+/// it.
 pub struct Checked {
     pub ir: Ir,
     pub warnings: Vec<Diagnostic>,
@@ -19,12 +19,9 @@ pub struct Checked {
 
 /// Checks a rule set and lowers it.
 ///
-/// The only way to obtain an `Ir`, which is what makes `lower`'s panics sound:
-/// it cannot be handed a tree that did not check, because nothing else can call
-/// it. Errors and warnings both come back on failure, so a warning is not lost
-/// just because an error appeared next to it.
-///
-/// Collects rather than bailing, so one bad rule does not hide the rest.
+/// The only way to obtain an `Ir`, which is what makes `lower`'s panics sound.
+/// Both kinds come back on failure, so an error does not bury a warning beside
+/// it. Collects rather than bailing: one bad rule must not hide the rest.
 pub fn check(ast: &Ast) -> Result<Checked, Vec<Diagnostic>> {
     let mut checker = Checker::new();
     checker.run(ast);
@@ -39,27 +36,25 @@ pub fn check(ast: &Ast) -> Result<Checked, Vec<Diagnostic>> {
     })
 }
 
-/// Cross-rule state. Anything scoped to a single rule lives on `RuleChecker`
-/// instead, so it cannot outlive the rule it belongs to.
+/// Cross-rule state. Anything rule-scoped lives on `RuleChecker`, so it cannot
+/// outlive the rule it belongs to.
 struct Checker {
     diags: Vec<Diagnostic>,
-    /// Signatures of the `def`s declared so far, in order. A def may call an
-    /// earlier one, which is what rules out recursion — and inlining needs that.
+    /// In order: a def may only call an earlier one, which rules out recursion
+    /// and so lets inlining terminate.
     defs: Vec<DefSig>,
-    /// Declared parameters, by name. File-scoped, so unlike a `let` this lives
-    /// on the whole-set checker rather than on `RuleChecker`.
+    /// File-scoped, so unlike a `let` these outlive any one rule.
     params: Vec<(String, Type)>,
 }
 
-/// Which of the two evaluations an expression belongs to.
+/// Which of the two evaluations an expression belongs to: a priority resolves
+/// once per doctrine, a condition runs every tick.
 ///
-/// A priority is resolved once, when a doctrine lands; a condition runs every
-/// tick. `Static` is what makes that separation a type error rather than a
-/// convention — see `docs/design.md`, "Two phases".
+/// `Static` makes that separation a type error rather than a convention — see
+/// `docs/design.md`, "Two phases".
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Phase {
-    /// Carries what is being checked, so the diagnostic can name it: a priority
-    /// and an argument are static for different reasons.
+    /// Carries what is being checked, so the diagnostic can name it.
     Static(&'static str),
     Tick,
 }
@@ -76,9 +71,8 @@ fn reserved(name: &str) -> Option<String> {
     if env::builtin(name).is_some() {
         return Some(format!("`{name}` is a builtin"));
     }
-    // Enum literals resolve by position, not through scope — so `powr` would
-    // mean the binding in `cash > powr` and the building in `count(powr)`. One
-    // name, two meanings, one rule.
+    // Enum literals resolve by position, so `powr` would mean the binding in
+    // `cash > powr` and the building in `count(powr)`.
     if let Some(d) = env::domains_containing(name).first() {
         return Some(format!("`{name}` is a {}", d.name()));
     }
@@ -94,17 +88,14 @@ struct DefSig {
 
 /// One rule's checking pass.
 ///
-/// The scope lives here rather than on `Checker` so a stale binding is
-/// impossible: it is born and dropped with the rule, leaving no `clear()` to
-/// forget. Diagnostics are borrowed because they outlive any one rule.
+/// The scope lives here so a stale binding is impossible: born and dropped with
+/// the rule, leaving no `clear()` to forget.
 struct RuleChecker<'a> {
     diags: &'a mut Vec<Diagnostic>,
     /// A `Vec` because there are no nested scopes and a handful of bindings.
     scope: Vec<(String, Type)>,
-    /// Borrowed from `Checker`: parameters outlive every rule.
     params: &'a [(String, Type)],
     defs: &'a [DefSig],
-    /// Which evaluation the expression being checked belongs to.
     phase: Phase,
 }
 
@@ -134,10 +125,8 @@ impl Checker {
         }
     }
 
-    /// Checks each `def` body and records what it returns.
-    ///
-    /// In order, with only earlier defs in scope: a def cannot call itself or a
-    /// later one, so inlining terminates.
+    /// Checks each `def` body and records what it returns, in order, with only
+    /// earlier defs in scope.
     fn declare_defs(&mut self, defs: &[crate::ast::Def]) {
         for d in defs {
             let name = &d.name.text;
@@ -154,11 +143,9 @@ impl Checker {
                 continue;
             }
 
-            // A def's parameters sit with the doctrine's rather than in the
-            // rule scope. They are substituted before anything evaluates, so
-            // they are as static as the arguments passed to them — and an
-            // argument is checked in the static phase, which does not consult
-            // the scope at all.
+            // With the doctrine's parameters rather than in the rule scope:
+            // they are substituted before anything evaluates, and an argument is
+            // checked in the static phase, which does not consult the scope.
             let mut visible = self.params.clone();
             for p in &d.params {
                 let ty = match p.kind {
@@ -206,9 +193,8 @@ impl Checker {
                 ParamKind::Float => Type::Float,
             };
 
-            // Recorded even when rejected, as `Type::Error`. Leaving it out
-            // would turn one bad declaration into an "unknown name" at every
-            // use — the same cascade `synth` avoids.
+            // Recorded even when rejected, so one bad declaration does not
+            // become an "unknown name" at every use.
             let bad = reserved(name)
                 .map(|why| format!("{why} and cannot be a parameter"))
                 .or_else(|| {
@@ -232,8 +218,7 @@ impl<'a> RuleChecker<'a> {
     fn rule(&mut self, rule: &Rule) {
         self.scope.clear();
 
-        // Checked before the bindings: a priority is resolved once per doctrine,
-        // so it may see parameters but not `let`s and not game state.
+        // Before the bindings: a priority may see parameters, not `let`s.
         self.priority(&rule.priority);
 
         for binding in &rule.lets {
@@ -245,9 +230,8 @@ impl<'a> RuleChecker<'a> {
             self.check_expr(require, &Type::Bool);
         }
 
-        // Closed tables, not types: a misspelled category would otherwise make a
-        // new exclusivity group and let two rules fire that meant to exclude
-        // each other.
+        // A misspelled category would make its own exclusivity group, letting
+        // two rules fire that meant to exclude each other.
         if !env::is_category(&rule.category.text) {
             let msg = format!("unknown category `{}`", rule.category.text);
             self.error(rule.category.span, msg);
@@ -255,14 +239,10 @@ impl<'a> RuleChecker<'a> {
         self.action(&rule.action);
     }
 
-    /// A priority must be an `Int` decidable before the first tick.
-    ///
-    /// Parameters, literals and `lerp` are in; a predicate is not. That is what
-    /// separates the two phases, and it is a type error rather than a
-    /// convention — see `docs/design.md`.
+    /// A priority must be an `Int` decidable before the first tick: parameters,
+    /// literals and builtins are in, a predicate is not.
     fn priority(&mut self, e: &Expr) {
-        // Restored unconditionally: `rule` checks the priority before the
-        // bindings and requires, so a leaked `Static` would reject every
+        // Restored unconditionally: a leaked `Static` would reject every
         // predicate in the rest of the rule.
         self.phase = Phase::Static("a priority");
         self.check_expr(e, &Type::Int);
@@ -306,19 +286,17 @@ impl<'a> RuleChecker<'a> {
         }
     }
 
-    /// Adds a `let` binding, rejecting anything that would shadow.
-    ///
-    /// A rule where `cash` means something other than cash is the confusion this
-    /// language exists to prevent.
+    /// Adds a `let` binding, rejecting anything that would shadow. A rule where
+    /// `cash` means something else is the confusion this language exists to
+    /// prevent.
     fn bind(&mut self, name: &Name, ty: Type) {
         if let Some(why) = reserved(&name.text) {
             let msg = format!("{why} and cannot be rebound");
             self.error(name.span, msg);
             return;
         }
-        // Lowering resolves the rule scope before the parameter table, so
-        // without this the meaning of a shadowed name would depend on the order
-        // two passes happen to look things up.
+        // Lowering resolves the scope before the parameter table, so without
+        // this a shadowed name would mean whatever the passes happened to do.
         if self.params.iter().any(|(n, _)| *n == name.text) {
             let msg = format!("`{}` is a parameter and cannot be rebound", name.text);
             self.error(name.span, msg);
@@ -337,8 +315,7 @@ impl<'a> RuleChecker<'a> {
     /// Bottom-up: the type this expression has.
     ///
     /// Returns `Type::Error` on failure, having already reported. `Error` is
-    /// compatible with everything, so one mistake yields one message rather than
-    /// cascading through every enclosing expression.
+    /// compatible with everything, so one mistake yields one message.
     fn synth(&mut self, e: &Expr) -> Type {
         match &e.kind {
             ExprKind::Int(_) => Type::Int,
@@ -353,8 +330,8 @@ impl<'a> RuleChecker<'a> {
                     }
                     self.count(args, n.span)
                 } else if let Some(sig) = self.defs.iter().find(|d| d.name == n.text) {
-                    // Inlined at lowering, so a def is as static as its body and
-                    // its arguments — no phase rule of its own.
+                    // Inlined at lowering, so a def is exactly as static as its
+                    // body and arguments — no phase rule of its own.
                     let params: Vec<ParamType> = sig
                         .params
                         .iter()

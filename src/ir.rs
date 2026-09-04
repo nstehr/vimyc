@@ -1,12 +1,8 @@
-//! The lowered form: a checked rule set with every name resolved.
+//! The lowered form: a checked rule set with every name resolved once, rather
+//! than once per consumer. `docs/implementation.md` covers why under "The IR".
 //!
-//! Sits between `check` and the things that consume a rule set — the evaluator
-//! and the emitters — so resolution happens once instead of once per consumer.
-//! `docs/implementation.md` covers why under "The IR".
-//!
-//! There is no `Ident` and no `Error` here, deliberately. A backend cannot
-//! forget to handle an unresolved name because there are none, and cannot be
-//! handed a tree that failed to check.
+//! No `Ident` and no `Error`, deliberately: a backend cannot forget to handle an
+//! unresolved name when there are none.
 
 use crate::ast::ParamKind;
 use crate::diag::Span;
@@ -14,11 +10,9 @@ use crate::env::Predicate;
 use crate::types::Domain;
 use std::collections::HashMap;
 
-/// A whole rule set, in priority order.
 #[derive(Debug)]
 pub struct Ir {
-    /// Doctrine inputs by slot, in declaration order. `IrExpr::Param` indexes
-    /// this, and a `ParamValues` supplies one number per entry.
+    /// In declaration order, which is the order `IrExpr::Param` indexes.
     pub params: Vec<IrParam>,
     pub rules: Vec<IrRule>,
 }
@@ -30,29 +24,23 @@ pub struct IrParam {
     pub span: Span,
 }
 
-/// What a doctrine supplies for one parameter.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ParamValue {
     Int(i64),
     Float(f64),
 }
 
-/// A doctrine's numbers, positional so a lookup is an index rather than a hash.
-///
-/// Built against an `Ir`, since only the parameter list says what order the
-/// values go in or how many there should be.
+/// A doctrine's numbers, positional so a lookup is an index.
 #[derive(Debug, Default, Clone)]
 pub struct ParamValues {
     pub values: Vec<ParamValue>,
 }
 
 impl ParamValues {
-    /// Puts a doctrine's numbers in slot order, reporting anything that does not
-    /// line up with what the rule set declares.
+    /// Orders a doctrine's numbers against what the rule set declares.
     ///
-    /// The alternative — trusting the caller to order them — makes a wrong
-    /// threshold indistinguishable from a right one, and a doctrine is exactly
-    /// the input least worth trusting.
+    /// Trusting the caller to order them would make a wrong threshold
+    /// indistinguishable from a right one.
     pub fn bind(ir: &Ir, supplied: &HashMap<String, f64>) -> Result<Self, String> {
         let mut values = Vec::with_capacity(ir.params.len());
         for p in &ir.params {
@@ -78,10 +66,9 @@ impl ParamValues {
                 ParamKind::Int => ParamValue::Int(n as i64),
             });
         }
-        // Extra values are not an error. A doctrine is a fixed record of some
-        // thirty numbers and any one rule set uses a handful, so "unknown" is
-        // the normal case rather than a mistake. A misspelling still shows up,
-        // as the parameter it was meant to supply going missing.
+        // Extra values are not an error: a doctrine carries thirty numbers and
+        // any one rule set uses a handful. A misspelling still surfaces, as the
+        // parameter it meant to supply going missing.
         Ok(ParamValues { values })
     }
 }
@@ -90,14 +77,11 @@ impl ParamValues {
 pub struct IrRule {
     /// Output only — emitted, never compared, so no reason to intern.
     pub name: String,
-    /// Resolved once per doctrine rather than per tick: the engine sorts on it,
-    /// so it has to be a number before the first evaluation. Restricted by the
-    /// checker to parameters, literals and `lerp`.
+    /// Resolved once per doctrine, not per tick: the engine sorts on it.
     pub priority: IrExpr,
     pub category: CategoryId,
     pub exclusive: bool,
-    /// Why the rule exists, carried through so it reaches whoever reads the
-    /// rule set later — see `docs/design.md`.
+    /// Why the rule exists. Reaches the dashboard; see `docs/design.md`.
     pub because: Option<String>,
     pub action: IrAction,
     /// Bindings by slot, in declaration order. `IrExpr::Binding` indexes this.
@@ -110,11 +94,8 @@ pub struct IrRule {
     pub span: Span,
 }
 
-/// An index into `env::CATEGORIES`.
-///
-/// Interned because exclusivity groups rules by category on every tick, and
-/// comparing integers beats comparing strings — the engine does it once per
-/// rule per evaluation.
+/// An index into `env::CATEGORIES`. Interned because exclusivity groups by
+/// category once per rule per tick.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CategoryId(pub u32);
 
@@ -143,26 +124,23 @@ pub struct IrExpr {
 pub enum IrExprKind {
     Int(i64),
     Float(f64),
-    /// Only ever produced by folding — the language has no boolean literal, but
-    /// a gate that a doctrine settles has to become one.
+    /// Only ever produced by folding: the language has no boolean literal.
     Bool(bool),
 
-    /// A resolved predicate and its lowered arguments. `count` never survives
-    /// lowering — it becomes whichever of the three it meant.
+    /// `count` never survives lowering — it becomes whichever of the three
+    /// predicates it meant.
     Predicate(Predicate, Vec<IrExpr>),
 
-    /// An enum literal, as an index into its domain's table. Already an integer,
-    /// which is what a wasm backend would want.
+    /// An enum literal, as an index into its domain's table.
     Member(Domain, u32),
 
-    /// A `let` binding, by slot into `IrRule::lets`.
+    /// By slot into `IrRule::lets`.
     Binding(u32),
-
-    /// A doctrine parameter, by slot into `Ir::params`.
+    /// By slot into `Ir::params`.
     Param(u32),
 
-    /// A pure function — `lerp`, `lerpf`. Kept distinct from `Predicate`
-    /// because reading no state is what makes it legal in a priority.
+    /// Distinct from `Predicate` because reading no state is what makes it
+    /// legal in a priority.
     Builtin(crate::env::Builtin, Vec<IrExpr>),
 
     Unary(crate::ast::UnOp, Box<IrExpr>),

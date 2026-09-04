@@ -1,8 +1,8 @@
 //! `Ast` to `Ir`: resolving every name exactly once.
 //!
-//! Runs only on a tree that checked, so nothing here reports a diagnostic —
-//! an unresolvable name at this point is a bug in `check`, not in the source.
-//! That is why `Ir` has no error variant.
+//! Runs only on a tree that checked, so an unresolvable name here is a bug in
+//! `check` rather than in the source. That is why `Ir` has no error variant and
+//! nothing here reports a diagnostic.
 
 use crate::ast::{Action, Ast, Expr, ExprKind, Rule};
 use crate::diag::Span;
@@ -12,15 +12,14 @@ use crate::types::{Domain, ParamType, Type};
 
 /// Lowers a checked rule set.
 ///
-/// Crate-private, and reachable only through `check`. That is what makes the
-/// panics below sound: an unresolved name here would mean `check` accepted
-/// something it should not have, not that a caller skipped it.
+/// Crate-private and reachable only through `check`, which is what makes the
+/// panics below sound rather than optimistic.
 /// Substitutes a `def`'s arguments into its body.
 ///
-/// At the AST rather than the IR, which keeps lowering unchanged: the call site
-/// becomes an ordinary expression and is lowered in the caller's scope. Capture
-/// is impossible because `bind` rejects any binding named after a doctrine
-/// parameter or a predicate, and a def body can name nothing else.
+/// At the AST, so the call site becomes an ordinary expression lowered in the
+/// caller's scope and nothing downstream knows defs exist. Capture is impossible
+/// because a def body can only name parameters, predicates and its own
+/// arguments, and `bind` rejects a binding named after any of them.
 fn inline(def: &crate::ast::Def, args: &[Expr]) -> Expr {
     fn subst(e: &Expr, bound: &[(String, &Expr)]) -> Expr {
         let kind = match &e.kind {
@@ -73,14 +72,14 @@ pub(crate) fn lower(ast: &Ast) -> Ir {
     }
 }
 
-/// `params` is the file's parameter names, in slot order. Threaded through
+/// `params` is the file's parameter names in slot order, threaded through
 /// because a parameter may appear anywhere an expression may.
 fn lower_rule(rule: &Rule, params: &[String], defs: &[crate::ast::Def]) -> IrRule {
     let category = env::category_id(&rule.category.text)
         .unwrap_or_else(|| unreachable!("unknown category `{}`", rule.category.text));
 
-    // Built as we go: a binding may refer to earlier ones but not to itself or
-    // to later ones, and its slot is its position here.
+    // Built as we go: a binding may refer only to earlier ones, and its slot is
+    // its position here.
     let mut scope: Vec<String> = Vec::with_capacity(rule.lets.len());
     let mut lets = Vec::with_capacity(rule.lets.len());
     for binding in &rule.lets {
@@ -90,8 +89,7 @@ fn lower_rule(rule: &Rule, params: &[String], defs: &[crate::ast::Def]) -> IrRul
 
     IrRule {
         name: rule.name.text.clone(),
-        // Only parameters are in scope: the checker has already rejected a
-        // priority that mentions a binding or a predicate.
+        // Only parameters are in scope; `check` rejected anything else.
         priority: lower_expr(&rule.priority, &[], params, defs),
 
         category: CategoryId(category),
@@ -118,9 +116,9 @@ fn lower_action(
     let id = env::action_id(&action.name.text)
         .unwrap_or_else(|| unreachable!("unknown action `{}`", action.name.text));
 
-    // Arguments lower like any other expression, except that the enum literals
-    // among them resolve by parameter position — the same rule as a predicate's,
-    // which is what makes `form-squad(ground-attack, Ground, 8, Attack)` work.
+    // Enum literals among them resolve by parameter position, the same rule as
+    // a predicate's — which is what makes
+    // `form-squad(ground-attack, Ground, 8, Attack)` work.
     let sig = env::action_signature(&action.name.text);
     let args = action
         .args
@@ -150,8 +148,8 @@ fn lower_expr(e: &Expr, scope: &[String], params: &[String], defs: &[crate::ast:
             if name.text == env::COUNT {
                 return lower_count(&args[0], e.span, scope, params, defs);
             }
-            // A def is expanded here rather than represented in the IR: the
-            // emitted rule must look exactly like Go's, which has no defs.
+            // Expanded here rather than represented in the IR: the emitted rule
+            // must look exactly like Go's, which has no defs.
             if let Some(def) = defs.iter().find(|d| d.name.text == name.text) {
                 return lower_expr(&inline(def, args), scope, params, defs);
             }
