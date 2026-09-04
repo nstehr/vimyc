@@ -675,3 +675,60 @@ fn lerp_rounds_the_way_go_does() {
         assert_eq!(rules[0].priority, want, "lerp(200, 400, {t})");
     }
 }
+
+/// The builtins the savings stack needs, pinned against Go.
+///
+/// `trunc` is the one that matters: Go's `int(x)` truncates while `lerp`
+/// rounds, and 800 * 0.29 is 231.999… — so rounding would give 232 where Go
+/// gives 231, an off-by-one buried in a cash threshold.
+#[test]
+fn the_arithmetic_builtins_match_go() {
+    let emit = |src: &str, doctrine: &[(&str, f64)]| -> String {
+        let (tokens, ld) = vimyc::lexer::lex(src);
+        assert!(ld.is_empty(), "{ld:?}");
+        let (ast, pd) = vimyc::parser::parse(&tokens);
+        assert!(pd.is_empty(), "{pd:?}");
+        let mut ir = vimyc::check::check(&ast).expect("checks").ir;
+        let map: std::collections::HashMap<String, f64> = doctrine
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), *v))
+            .collect();
+        let params = vimyc::ir::ParamValues::bind(&ir, &map).expect("binds");
+        vimyc::specialise::specialise(&mut ir, &params);
+        let vimyc::emit::Artifact::Expr(rules) =
+            vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr);
+        rules[0].condition.clone()
+    };
+
+    let trunc = "param s: float\nrule r {\n priority 1\n category economy\n do scout\n \
+                 require cash >= trunc(800.0 * s)\n}\n";
+    // int(800.0 * s) in Go, for the same five values.
+    for (s, want) in [(0.3, 240), (0.7, 560), (0.29, 231), (0.1, 80), (0.55, 440)] {
+        assert_eq!(
+            emit(trunc, &[("s", s)]),
+            format!("Cash() >= {want}"),
+            "s = {s}"
+        );
+    }
+
+    // max clamps a negative difference to zero, which is what Go's
+    // `if reserveScale < 0 { reserveScale = 0 }` does.
+    let clamp = "param a: float\nparam b: float\n\
+                 rule r {\n priority 1\n category economy\n do scout\n \
+                 require cash >= 800 + trunc(800.0 * max(0.0, a - b))\n}\n";
+    assert_eq!(emit(clamp, &[("a", 0.6), ("b", 0.3)]), "Cash() >= 1040");
+    assert_eq!(emit(clamp, &[("a", 0.2), ("b", 0.5)]), "Cash() >= 800");
+
+    // select is a step, which no lerp or clamp can express: at a = 0.2 the
+    // answer is 1.0, not 0.8.
+    let step = "param a: float\n\
+                rule r {\n priority 1\n category economy\n do scout\n \
+                require cash >= trunc(select(a >= 0.4, 1.0 - a, 1.0) * 100.0)\n}\n";
+    assert_eq!(emit(step, &[("a", 0.6)]), "Cash() >= 40");
+    assert_eq!(emit(step, &[("a", 0.2)]), "Cash() >= 100");
+
+    let m = "param a: float\nparam b: float\n\
+             rule r {\n priority 1\n category economy\n do scout\n \
+             require cash >= trunc(min(a, b) * 1000.0)\n}\n";
+    assert_eq!(emit(m, &[("a", 0.6), ("b", 0.3)]), "Cash() >= 300");
+}

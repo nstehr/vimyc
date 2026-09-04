@@ -106,6 +106,10 @@
                    | "require" | "because" | "let" | "and" | "or" | "not"
                    | "exists" | "param" | "int" | "float"
 
+; Builtins are ordinary call syntax, not keywords: `lerp`, `lerpf`, `max`,
+; `min`, `trunc`, `select`. They are rejected as binding and parameter names by
+; the checker, not by the grammar.
+
 ; Whitespace separates tokens and is otherwise insignificant.
 ```
 

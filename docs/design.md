@@ -335,19 +335,33 @@ engine sorts by, so it has to be decidable before the tick begins.
 predicate.** `priority cash` is a type error, not a runtime surprise. The phase
 separation is a property the type checker holds rather than a convention.
 
-### `lerp` and `lerpf`
-
-The only two builtins, because they are the only two arithmetic shapes Go uses
-on a doctrine value: 66 calls to `lerp` and 5 to `lerpf` across the compiler,
-and nothing else.
+### The builtins
 
 ```
-lerp(min: int, max: int, t: float) -> int      ; rounds
+lerp(min: int, max: int, t: float) -> int        ; rounds
 lerpf(min: float, max: float, t: float) -> float
+max(a: float, b: float) -> float
+min(a: float, b: float) -> float
+trunc(x: float) -> int                           ; toward zero
+select(cond: bool, a: float, b: float) -> float
 ```
 
-Not predicates: they read no state, which is exactly why they are allowed in a
-priority.
+Not predicates: they read no state, which is exactly why a priority may use one.
+
+`lerp` and `lerpf` cover the doctrine arithmetic in the rule blocks — 66 calls
+and 5, and nothing else. The other four come from the savings stack in
+`compiler.go`, which the blocks lean on:
+
+- `max` for `if reserveScale < 0 { reserveScale = 0 }`
+- `trunc` for `int(800.0 * reserveScale)`, which truncates where `lerp` rounds.
+  The difference is real: `800 * 0.29` is `231.999…`, so Go gives 231 and a
+  rounding version would give 232 — an off-by-one buried in a cash threshold.
+- `select` for `x := a; if cond { x = b }`, a value chosen by a condition. Not a
+  lerp and not a clamp: at `vehicle-weight` 0.2 the answer is 1.0, not 0.8.
+
+`select` is expressible without a builtin, by writing both variants as gated
+conjuncts so exactly one survives folding. That works, but it doubles every
+savings clause in the rules that use it, and those already carry three.
 
 ### Binding time is not a design decision
 

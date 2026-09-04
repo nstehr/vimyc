@@ -132,6 +132,18 @@ fn apply_builtin(id: env::Builtin, args: &[Value]) -> Value {
             let (min, max) = (as_f64(*min), as_f64(*max));
             Value::Float(min + (max - min) * as_f64(*t))
         }
+        (env::Builtin::Max, [a, b]) => Value::Float(as_f64(*a).max(as_f64(*b))),
+        (env::Builtin::Min, [a, b]) => Value::Float(as_f64(*a).min(as_f64(*b))),
+        // Toward zero, like Go's `int(x)`, and saturating like every other
+        // integer path here.
+        (env::Builtin::Trunc, [x]) => Value::Int(as_f64(*x).trunc() as i64),
+        (env::Builtin::Select, [cond, a, b]) => {
+            if expect_bool(*cond) {
+                Value::Float(as_f64(*a))
+            } else {
+                Value::Float(as_f64(*b))
+            }
+        }
         _ => unreachable!("{id:?} with {} arguments", args.len()),
     }
 }

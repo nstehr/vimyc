@@ -111,6 +111,15 @@ pub struct Member {
 pub enum Builtin {
     Lerp,
     Lerpf,
+    Max,
+    Min,
+    /// Truncation toward zero, which is what Go's `int(x)` conversion does.
+    /// Distinct from `lerp`, which rounds — the difference is an off-by-one in
+    /// a threshold, and those are hard to see in a diff.
+    Trunc,
+    /// The one builtin that takes a bool. Go writes doctrine-dependent values
+    /// as `x := a; if cond { x = b }`, which is neither a lerp nor a clamp.
+    Select,
 }
 
 pub struct BuiltinSignature {
@@ -134,14 +143,36 @@ pub const BUILTINS: &[BuiltinSignature] = &[
     BuiltinSignature {
         id: Builtin::Lerpf,
         name: "lerpf",
-        params: &[
-            ParamType::Exact(Type::Float),
-            ParamType::Exact(Type::Float),
-            ParamType::Exact(Type::Float),
-        ],
+        params: &[F, F, F],
+        ret: Type::Float,
+    },
+    BuiltinSignature {
+        id: Builtin::Max,
+        name: "max",
+        params: &[F, F],
+        ret: Type::Float,
+    },
+    BuiltinSignature {
+        id: Builtin::Min,
+        name: "min",
+        params: &[F, F],
+        ret: Type::Float,
+    },
+    BuiltinSignature {
+        id: Builtin::Trunc,
+        name: "trunc",
+        params: &[F],
+        ret: Type::Int,
+    },
+    BuiltinSignature {
+        id: Builtin::Select,
+        name: "select",
+        params: &[ParamType::Exact(Type::Bool), F, F],
         ret: Type::Float,
     },
 ];
+
+const F: ParamType = ParamType::Exact(Type::Float);
 
 pub fn builtin(name: &str) -> Option<&'static BuiltinSignature> {
     BUILTINS.iter().find(|b| b.name == name)
