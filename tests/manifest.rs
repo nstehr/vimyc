@@ -264,3 +264,33 @@ fn render(lit: &str) -> String {
         _ => lit.to_string(),
     }
 }
+
+/// The emitter derives Go's method name from the kebab one. That only works
+/// while Go's names are derivable, and three are not — so the exception table
+/// is checked against the manifest in both directions: every predicate resolves
+/// to the name Go actually exports, and no entry survives past its need.
+#[test]
+fn go_name_matches_the_manifest() {
+    let mut needed = std::collections::HashSet::new();
+    for m in used() {
+        let got = vimyc::emit::expr::go_name(&m.kebab);
+        assert_eq!(got, m.name, "`{}` emits a name Go does not export", m.kebab);
+        if got != m.kebab.split('-').map(capitalise).collect::<String>() {
+            needed.insert(m.kebab.clone());
+        }
+    }
+    for (kebab, _) in vimyc::emit::expr::ACRONYMS {
+        assert!(
+            needed.contains(*kebab),
+            "`{kebab}` no longer needs an exception"
+        );
+    }
+}
+
+fn capitalise(part: &str) -> String {
+    let mut c = part.chars();
+    match c.next() {
+        Some(f) => f.to_ascii_uppercase().to_string() + c.as_str(),
+        None => String::new(),
+    }
+}

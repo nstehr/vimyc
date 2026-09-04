@@ -10,10 +10,13 @@
 pub mod ast;
 pub mod check;
 pub mod diag;
+pub mod emit;
 pub mod env;
 pub mod eval;
 pub mod fmt;
+pub mod ir;
 pub mod lexer;
+pub mod lower;
 pub mod parser;
 pub mod state;
 pub mod token;

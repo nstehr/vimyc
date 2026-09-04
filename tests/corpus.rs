@@ -398,3 +398,153 @@ fn the_documented_grammar_parses_and_checks() {
     assert!(m.lets.is_empty());
     assert!(m.action.args.is_empty(), "action without arguments");
 }
+
+/// Lowering resolves every name in the seed rules.
+///
+/// It panics rather than reporting — an unresolvable name means `check` accepted
+/// something it should not have — so simply running it is the assertion.
+#[test]
+fn seed_lowers() {
+    let ir = vimyc::lower::lower(&parse_seed());
+    assert_eq!(ir.rules.len(), 13);
+
+    // `count(powr)` and `count(idle-ground-units)` are different predicates
+    // after lowering; nothing downstream should see a `count` node.
+    let names: Vec<&str> = ir.rules.iter().map(|r| r.name.as_str()).collect();
+    assert!(names.contains(&"build-power"));
+}
+
+/// Every rule set a real game ran lowers.
+#[test]
+fn real_rule_sets_lower() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/testdata/real_differential.json"
+    );
+    let Ok(text) = std::fs::read_to_string(path) else {
+        eprintln!("no recorded game; skipping");
+        return;
+    };
+    #[derive(serde::Deserialize)]
+    struct Corpus {
+        rule_sets: Vec<String>,
+    }
+    let c: Corpus = serde_json::from_str(&text).expect("corpus");
+
+    for (i, src) in c.rule_sets.iter().enumerate() {
+        let (tokens, ld) = vimyc::lexer::lex(src);
+        assert!(ld.is_empty(), "rule set {i}: {ld:?}");
+        let (ast, pd) = vimyc::parser::parse(&tokens);
+        assert!(pd.is_empty(), "rule set {i}: {pd:?}");
+        let ir = vimyc::lower::lower(&ast);
+        assert_eq!(ir.rules.len(), ast.rules.len(), "rule set {i}");
+    }
+    eprintln!("{} real rule sets lower", c.rule_sets.len());
+}
+
+/// expr emitted from `seed.vy` matches what Go compiled it from.
+///
+/// The strongest check available without leaving the crate: `rules/seed.vy` was
+/// hand-translated from `DefaultRules()`, so emitting it should land back on the
+/// original conditions. Anything else means the translation or the emitter lost
+/// something.
+///
+/// Compared with whitespace normalised, since the two were written by different
+/// hands and spacing is not meaning.
+#[test]
+fn emitted_expr_round_trips_to_go() {
+    let ir = vimyc::lower::lower(&parse_seed());
+    let vimyc::emit::Artifact::Expr(emitted) = vimyc::emit::emit(&ir, vimyc::emit::Target::Expr);
+
+    let expected = seed();
+    let squeeze = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    let mut differ = Vec::new();
+    for want in &expected {
+        let got = emitted
+            .iter()
+            .find(|r| r.name == want.name)
+            .unwrap_or_else(|| panic!("`{}` was not emitted", want.name));
+
+        if squeeze(&got.condition) != squeeze(&want.condition) {
+            differ.push(format!(
+                "  {}\n    go:    {}\n    vimyc: {}",
+                want.name, want.condition, got.condition
+            ));
+        }
+        assert_eq!(got.priority, want.priority, "{}: priority", want.name);
+        assert_eq!(got.category, want.category, "{}: category", want.name);
+        assert_eq!(got.exclusive, want.exclusive, "{}: exclusive", want.name);
+    }
+
+    assert!(
+        differ.is_empty(),
+        "{} of {} conditions did not round trip:\n{}",
+        differ.len(),
+        expected.len(),
+        differ.join("\n")
+    );
+    eprintln!(
+        "{} conditions round trip to Go's expr exactly",
+        expected.len()
+    );
+}
+
+/// Emits one condition, so parenthesisation can be asserted exactly.
+fn emit_one(requires: &str) -> String {
+    let src = format!(
+        "rule probe {{\n  priority 1\n  category production\n  require {requires}\n  do air-defend-base()\n}}\n"
+    );
+    let (tokens, lex_diags) = vimyc::lexer::lex(&src);
+    assert!(lex_diags.is_empty(), "{requires}: {lex_diags:?}");
+    let (ast, parse_diags) = vimyc::parser::parse(&tokens);
+    assert!(parse_diags.is_empty(), "{requires}: {parse_diags:?}");
+    let check_diags = vimyc::check::check(&ast);
+    assert!(check_diags.is_empty(), "{requires}: {check_diags:?}");
+    let ir = vimyc::lower::lower(&ast);
+    let vimyc::emit::Artifact::Expr(rules) = vimyc::emit::emit(&ir, vimyc::emit::Target::Expr);
+    rules[0].condition.clone()
+}
+
+/// The round trip against a real game normalises parentheses away, since Go
+/// emits whatever its templates contain. That leaves precedence unchecked for
+/// any rule the recorded states never make true — which is most of them. These
+/// pin it directly: each case is one where dropping a paren changes the meaning.
+#[test]
+fn emits_the_parentheses_precedence_needs() {
+    let cases = [
+        // `||` under `&&` keeps its group; `&&` under `||` does not gain one.
+        (
+            "has-role(barracks) and (has-role(radar) or is-rushed())",
+            r#"HasRole("barracks") && (HasRole("radar") || IsRushed())"#,
+        ),
+        // A require is an operand of the `&&` that joins the others, so a
+        // top-level `||` is grouped even when it is the only require.
+        (
+            "has-role(barracks) or has-role(radar) and is-rushed()",
+            r#"(HasRole("barracks") || HasRole("radar") && IsRushed())"#,
+        ),
+        // Arithmetic below a comparison never needs one; the reverse always does.
+        (
+            "count(powr) + count(proc) < 7",
+            r#"BuildingCount("powr") + BuildingCount("proc") < 7"#,
+        ),
+        (
+            "cash() * (count(powr) + 1) > 100",
+            r#"Cash() * (BuildingCount("powr") + 1) > 100"#,
+        ),
+        // Subtraction is not associative, so a right operand keeps its group.
+        (
+            "cash() - (count(powr) - 1) > 0",
+            r#"Cash() - (BuildingCount("powr") - 1) > 0"#,
+        ),
+        // `not` binds tighter than everything below it.
+        (
+            "not (has-role(barracks) and has-role(radar))",
+            r#"!(HasRole("barracks") && HasRole("radar"))"#,
+        ),
+    ];
+    for (src, want) in cases {
+        assert_eq!(emit_one(src), want, "emitting `{src}`");
+    }
+}

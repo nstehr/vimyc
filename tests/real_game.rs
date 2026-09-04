@@ -16,6 +16,9 @@ use serde::Deserialize;
 struct RealCorpus {
     /// One vimyc source file per distinct rule set the game ran.
     rule_sets: Vec<String>,
+    /// The expr conditions each was translated from, per rule name.
+    #[serde(default)]
+    conditions: Vec<std::collections::HashMap<String, String>>,
     states: Vec<vimyc::state::State>,
     cases: Vec<RealCase>,
 }
@@ -141,4 +144,99 @@ fn agrees_with_a_real_game() {
             .join("\n")
     );
     eprintln!("{checked} evaluations from a real game, no disagreements");
+}
+
+/// A full round trip: Go's expr, translated to vimyc, lowered, emitted, and back
+/// to the condition it started as.
+///
+/// Stronger than comparing evaluations, because it reaches the rules the
+/// recorded states never make true — most of a rule set, in a real game.
+#[test]
+fn emitted_expr_round_trips_on_a_real_game() {
+    let Some(c) = corpus() else {
+        eprintln!("no recorded game; skipping");
+        return;
+    };
+    assert!(
+        !c.conditions.is_empty(),
+        "corpus predates the conditions field; regenerate it"
+    );
+
+    let squeeze = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    // Go writes the parentheses its templates happen to contain; vimyc writes
+    // only the ones precedence needs. Comparing without them keeps this test on
+    // the question it exists to answer — do the names and the shape survive —
+    // and leaves precedence to `agrees_with_a_real_game`, which evaluates.
+    // Go writes what its templates contain; vimyc writes a canonical form. The
+    // differences that remain are parenthesisation, spacing and how a float is
+    // spelled — `0.40` against `0.4`. None of them reach the engine, and
+    // `agrees_with_a_real_game` covers precedence by evaluating.
+    let bare = |s: &str| trim_zeros(&squeeze(s).replace(['(', ')', ' '], ""));
+
+    let mut differ = Vec::new();
+    let mut checked = 0usize;
+
+    for (i, src) in c.rule_sets.iter().enumerate() {
+        let ir = vimyc::lower::lower(&parse(src, i));
+        let vimyc::emit::Artifact::Expr(emitted) =
+            vimyc::emit::emit(&ir, vimyc::emit::Target::Expr);
+
+        for rule in &emitted {
+            let Some(want) = c.conditions[i].get(&rule.name) else {
+                panic!(
+                    "rule set {i} emitted `{}`, which Go did not compile",
+                    rule.name
+                );
+            };
+            checked += 1;
+            if bare(&rule.condition) != bare(want) {
+                differ.push(format!(
+                    "  {}\n    go:    {want}\n    vimyc: {}",
+                    rule.name, rule.condition
+                ));
+            }
+        }
+    }
+
+    assert!(checked > 1000, "corpus looks truncated: {checked}");
+    assert!(
+        differ.is_empty(),
+        "{} of {checked} conditions did not round trip:\n{}",
+        differ.len(),
+        differ
+            .iter()
+            .take(6)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    eprintln!("{checked} conditions round trip to Go's expr");
+}
+
+/// `0.40` and `0.4` are the same number; Go keeps the doctrine's spelling and
+/// vimyc reprints the parsed value.
+fn trim_zeros(s: &str) -> String {
+    let b: Vec<char> = s.chars().collect();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < b.len() {
+        // Only inside a fraction, so the `0` in `flame_tower` survives.
+        if b[i] == '.' && i > 0 && b[i - 1].is_ascii_digit() {
+            let mut end = i + 1;
+            while end < b.len() && b[end].is_ascii_digit() {
+                end += 1;
+            }
+            let frac = b[i + 1..end].iter().collect::<String>();
+            let frac = frac.trim_end_matches('0');
+            if !frac.is_empty() {
+                out.push('.');
+                out.push_str(frac);
+            }
+            i = end;
+            continue;
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    out
 }

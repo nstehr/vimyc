@@ -866,6 +866,50 @@ pub fn is_category(name: &str) -> bool {
     CATEGORIES.contains(&name)
 }
 
+/// A category's index into `CATEGORIES`.
+pub fn category_id(name: &str) -> Option<u32> {
+    CATEGORIES.iter().position(|c| *c == name).map(|i| i as u32)
+}
+
+pub fn category_name(id: u32) -> &'static str {
+    CATEGORIES[id as usize]
+}
+
+/// An action's index.
+///
+/// One space covering both tables: plain actions first, then the parameterised
+/// ones, which are built by a factory and so are absent from Go's registry.
+pub fn action_id(name: &str) -> Option<u32> {
+    if let Some(i) = ACTIONS.iter().position(|a| *a == name) {
+        return Some(i as u32);
+    }
+    ACTION_SIGNATURES
+        .iter()
+        .position(|a| a.name == name)
+        .map(|i| (ACTIONS.len() + i) as u32)
+}
+
+pub fn action_name(id: u32) -> &'static str {
+    let i = id as usize;
+    if i < ACTIONS.len() {
+        ACTIONS[i]
+    } else {
+        ACTION_SIGNATURES[i - ACTIONS.len()].name
+    }
+}
+
+/// A member's index within its domain.
+pub fn member_index(domain: Domain, name: &str) -> Option<u32> {
+    members(domain)
+        .iter()
+        .position(|m| m.name == name)
+        .map(|i| i as u32)
+}
+
+pub fn member_name(domain: Domain, index: u32) -> &'static str {
+    members(domain)[index as usize].name
+}
+
 pub fn is_action(name: &str) -> bool {
     ACTIONS.contains(&name) || action_signature(name).is_some()
 }

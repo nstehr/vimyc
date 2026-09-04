@@ -204,6 +204,123 @@ unit and building counts, roles, queue state. Deriving those fixtures from
 `testdata/` rather than hand-writing them is what makes the differential
 milestone cheap.
 
+## The IR
+
+Planned, not yet built.
+
+Name resolution currently happens three times. `check` resolves `cash` to
+`Predicate::Cash`, decides which of three things `count(x)` means, and finds
+which domain `powr` belongs to — then returns only `Vec<Diagnostic>` and throws
+all of it away. `eval` resolves again at runtime, calling `env::predicate(name)`
+per call, a linear scan of 64 signatures. An emitter would resolve a third time.
+
+A lowered IR resolves once, and it is what makes a second backend cheap:
+
+```text
+source → lex → parse → check → lower → Ir → { eval, emit::expr, emit::wasm }
+```
+
+### Shape
+
+```rust
+pub struct IrRule {
+    pub name: String,          // output-only; no reason to intern
+    pub priority: i64,
+    pub category: CategoryId,
+    pub exclusive: bool,
+    pub action: IrAction,      // resolved id, lowered args
+    pub lets: Vec<IrExpr>,     // by slot; the name is gone
+    pub requires: Vec<IrExpr>,
+    pub span: Span,
+}
+
+pub enum IrExpr {
+    Int(i64),
+    Float(f64),
+    Predicate(Predicate, Vec<IrExpr>),
+    Member(Domain, u32),       // index into the table, not a string
+    Binding(u32),              // slot, not a name
+    Unary(UnOp, Box<IrExpr>),
+    Binary(BinOp, Box<IrExpr>, Box<IrExpr>),
+}
+```
+
+**No `Ident` and no `Error`.** That is the point, and the same move as
+`ParamType` and `RuleChecker`: a backend cannot forget to handle an unresolved
+name because there are none, and cannot be handed a tree that failed to check.
+
+`Member(Domain, u32)` also hands a future wasm backend its ABI — every enum
+literal is already an integer.
+
+**Spans stay on `IrExpr`.** Backends do not diagnose, but blocked-on analysis
+does: "which conjunct was false for 1,400 ticks" has to point at source, and
+`eval::conjuncts` exists for exactly that.
+
+### Decisions this forces
+
+**`check` returns a `Result`.** Lowering can only run on a clean tree, so
+`check(ast) -> Result<Ir, Vec<Diagnostic>>` rather than the
+`(thing, Vec<Diagnostic>)` shape used elsewhere. Parse can return a tree with
+holes; lowering cannot.
+
+**Errors and warnings need separating first.** Priority collisions are currently
+errors, and they are what found `vimy-axv` — but a rule set that trips one is
+still perfectly lowerable, it just has a latent bug. Every real doctrine trips
+it, so either they become warnings or every consumer filters them forever.
+Splitting the two is the smaller change.
+
+**`count` resolves at lowering.** It is the one overloaded name, and the IR
+should carry `Predicate(BuildingCount, …)` or `Predicate(IdleGroundUnits, …)`
+already decided. Nothing downstream should ever see a `count` node — it is the
+clearest demonstration of what lowering is for.
+
+### Selecting a backend
+
+An enum, not `dyn Backend`:
+
+```rust
+pub enum Target { Expr, Wasm }
+pub enum Artifact { Expr(Vec<String>), Wasm(Vec<u8>) }
+```
+
+The set is closed and known at compile time, so an enum beats a trait object: no
+vtable, no lifetime friction, and exhaustiveness — adding a target becomes a
+compile error everywhere it matters, the way `Predicate` did when `apply` refused
+to build. A trait with an associated `Output` would abstract the wrong thing
+anyway; the emitters share almost no interface, and what they actually share is
+the resolution work the IR now does once.
+
+### Sequence, and why the risk is low
+
+1. `ir.rs` — types only
+2. `lower.rs` — `Ast → Ir`, reusing the checker's resolution
+3. Port `eval` to consume `Ir`. **The differential is the gate**: if lowering
+   changes behaviour at all, 16,317 real evaluations say so
+4. `emit/expr.rs` — `Ir → Vec<String>`
+5. Verify the emitter against Go
+
+Step 5 has an acceptance test already available. Take the rule sets from a
+recorded game, translate to `.vy`, lower, emit expr, then run *that* expr through
+Go's engine against the same states and diff against the recorded results. A full
+round trip — Go to vimyc and back — checked against real play.
+
+Steps 1 to 3 carry no risk that cannot be detected. Step 4 is small. Step 5 is
+where an unfaithful emitter would show up.
+
+### Why expr before wasm
+
+Emitting expr means Go's engine is unchanged, so everything already verified
+stays verified. WASM's advantages turned out thinner than they first looked:
+expr is already an expression evaluator with no I/O, so the sandbox is nearly
+free already; evaluation is 88µs for 75 rules, so speed is irrelevant; cgo is
+already required by the BAML client, so wazero buys no purity; and a wasm module
+still calls host imports for all 64 predicates, so it is no more self-contained
+than a string.
+
+What remains is that it drops expr as a dependency and is an interesting piece of
+engineering — which are honest reasons, just not urgent ones. Doing expr first
+also means a wasm backend arrives with an oracle and a corpus already in place.
+
 ## Formatter
 
 A pretty-printer over the AST: parse, discard the original text, print the tree.
