@@ -66,9 +66,17 @@ pub enum Type {
 }
 
 impl Type {
-    /// `Error` matches anything — see the variant.
+    /// Whether a value of this type is acceptable where `other` is expected.
+    ///
+    /// An `Int` widens to a `Float`, and only that way: `lerp` returns an
+    /// integer and `max` takes floats, so `max(745.0, lerp(600, 700, w))` is the
+    /// ordinary shape rather than an error. Evaluation already treats the two as
+    /// one through `as_f64`; this makes the checker agree.
     pub fn compatible(&self, other: &Type) -> bool {
-        matches!(self, Type::Error) || matches!(other, Type::Error) || self == other
+        matches!(self, Type::Error)
+            || matches!(other, Type::Error)
+            || self == other
+            || (matches!(self, Type::Int) && matches!(other, Type::Float))
     }
 
     pub fn is_numeric(&self) -> bool {

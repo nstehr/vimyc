@@ -45,13 +45,22 @@ fn normalise(s: &str) -> String {
 
 #[test]
 fn the_economy_block_matches_go() {
+    block_matches_go("economy.vy");
+}
+
+#[test]
+fn the_buildings_block_matches_go() {
+    block_matches_go("buildings.vy");
+}
+
+fn block_matches_go(file: &str) {
     let Some(cases) = corpus() else {
         eprintln!("no acceptance corpus; run TestDumpAcceptanceCorpus");
         return;
     };
 
-    let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/rules/economy.vy"))
-        .expect("economy.vy");
+    let path = format!("{}/rules/{file}", env!("CARGO_MANIFEST_DIR"));
+    let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
     let (tokens, ld) = vimyc::lexer::lex(&src);
     assert!(ld.is_empty(), "{ld:?}");
     let (ast, pd) = vimyc::parser::parse(&tokens);
@@ -60,7 +69,9 @@ fn the_economy_block_matches_go() {
     // The names this block claims. Anything outside it belongs to a block that
     // has not been ported.
     let ported: HashSet<String> = {
-        let ir = vimyc::check::check(&ast).expect("economy.vy checks").ir;
+        let ir = vimyc::check::check(&ast)
+            .unwrap_or_else(|d| panic!("{file} does not check: {d:?}"))
+            .ir;
         ir.rules.iter().map(|r| r.name.clone()).collect()
     };
 
@@ -129,7 +140,7 @@ fn the_economy_block_matches_go() {
             .join("\n")
     );
     eprintln!(
-        "{compared} economy rules across {} doctrines match Go",
+        "{compared} rules from {file} across {} doctrines match Go",
         cases.len()
     );
 }
