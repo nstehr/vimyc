@@ -633,6 +633,9 @@ pub const SQUAD_NAMES: &[Member] = &[
     },
     Member { name: "air-attack" },
     Member {
+        name: "harvester-guard",
+    },
+    Member {
         name: "naval-attack",
     },
 ];
@@ -1050,6 +1053,13 @@ pub const ACTION_SIGNATURES: &[ActionSignature] = &[
     ActionSignature {
         name: "squad-defend",
         params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
+    },
+    ActionSignature {
+        name: "squad-guard-harvesters",
+        params: &[
+            ParamType::Exact(Type::Enum(Domain::SquadName)),
+            ParamType::Exact(Type::Float),
+        ],
     },
     ActionSignature {
         name: "recall-overextended",

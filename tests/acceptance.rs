@@ -7,6 +7,11 @@
 //!
 //! Only the rules the `.vy` file defines are compared. A block that has not been
 //! ported yet is simply absent from both sides of the diff.
+//!
+//! The corpus is frozen: `CompileDoctrine` is deleted, so nothing can regenerate
+//! it. It verifies the port, and rules written since are outside its scope —
+//! `POST_PORT` names them, so a new rule does not fail the test and an
+//! accidental one does not slip through.
 
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
@@ -26,6 +31,12 @@ struct GoRule {
     action: String,
     condition: String,
 }
+
+/// Rules that postdate the port, and so have no counterpart in the corpus.
+///
+/// Explicit rather than "ignore anything unmatched": the whole value of the
+/// frozen corpus is that an unexpected rule is still an error.
+const POST_PORT: &[&str] = &["form-harvester-guard", "guard-harvesters"];
 
 fn corpus() -> Option<Vec<Case>> {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/acceptance.json");
@@ -122,7 +133,11 @@ fn block_matches_go(file: &str) {
         let ir = vimyc::check::check(&ast)
             .unwrap_or_else(|d| panic!("{file} does not check: {d:?}"))
             .ir;
-        ir.rules.iter().map(|r| r.name.clone()).collect()
+        ir.rules
+            .iter()
+            .map(|r| r.name.clone())
+            .filter(|n| !POST_PORT.contains(&n.as_str()))
+            .collect()
     };
 
     let mut differ: Vec<String> = Vec::new();
@@ -144,6 +159,9 @@ fn block_matches_go(file: &str) {
             .collect();
 
         for r in &mine {
+            if POST_PORT.contains(&r.name.as_str()) {
+                continue;
+            }
             let Some(want) = theirs.get(r.name.as_str()) else {
                 differ.push(format!("doctrine {i}: emitted `{}`, Go did not", r.name));
                 continue;
@@ -271,9 +289,19 @@ fn the_blocks_cover_every_rule_go_emits() {
             emitted.extend(ir.rules.iter().map(|r| r.name.clone()));
         }
     }
+
+    // The post-port rules must actually be reachable, or naming one here would
+    // be a way to hide a rule that never fires.
+    for n in POST_PORT {
+        assert!(
+            emitted.contains(*n),
+            "`{n}` is never emitted by any doctrine"
+        );
+    }
+
     let invented: Vec<&String> = emitted
         .iter()
-        .filter(|n| !go.contains(n.as_str()))
+        .filter(|n| !go.contains(n.as_str()) && !POST_PORT.contains(&n.as_str()))
         .collect();
     assert!(
         invented.is_empty(),

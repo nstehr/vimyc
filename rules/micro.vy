@@ -98,3 +98,25 @@ rule scout-with-idle-units {
   require not enemies-visible
   require count(unassigned-idle-ground) >= ground-attack-group-size
 }
+
+rule form-harvester-guard {
+  priority lerp(360, 430, economy-priority) + 5
+  category squad-form
+  because "a squad reserved for the economy, so the attack rules cannot poach it back"
+  do form-squad(harvester-guard, Ground, lerp(2, 4, economy-priority), Defend)
+  require economy-priority > 0.3
+  require (not squad-exists(harvester-guard)
+           and count(unassigned-idle-ground) >= lerp(2, 4, economy-priority) + 2)
+       or (squad-needs-reinforcement(harvester-guard) and count(unassigned-idle-ground) >= 1)
+}
+
+rule guard-harvesters {
+  priority lerp(360, 430, economy-priority)
+  category combat
+  because "every other defensive rule is anchored at the base, so a harvester raided at an ore patch summoned nobody"
+  do squad-guard-harvesters(harvester-guard, lerpf(0.05, 0.15, economy-priority))
+  require economy-priority > 0.3
+  require squad-exists(harvester-guard)
+  require squad-idle-count(harvester-guard) > 0
+  require count(harvesters-in-danger(round2(lerpf(0.05, 0.15, economy-priority)))) > 0
+}
