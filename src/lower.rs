@@ -96,6 +96,7 @@ fn lower_rule(rule: &Rule, params: &[String], defs: &[crate::ast::Def]) -> IrRul
 
         category: CategoryId(category),
         exclusive: rule.exclusive,
+        because: rule.because.clone(),
         action: lower_action(&rule.action, &scope, params, defs),
         requires: rule
             .requires

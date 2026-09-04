@@ -96,6 +96,9 @@ pub struct IrRule {
     pub priority: IrExpr,
     pub category: CategoryId,
     pub exclusive: bool,
+    /// Why the rule exists, carried through so it reaches whoever reads the
+    /// rule set later — see `docs/design.md`.
+    pub because: Option<String>,
     pub action: IrAction,
     /// Bindings by slot, in declaration order. `IrExpr::Binding` indexes this.
     pub lets: Vec<IrExpr>,

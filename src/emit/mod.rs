@@ -33,6 +33,9 @@ pub struct RuleSource {
     pub priority: i64,
     pub category: String,
     pub exclusive: bool,
+    /// Why the rule exists. Absent unless the source said.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub because: Option<String>,
     /// The action id, with arguments when it is built by a factory.
     pub action: String,
     pub condition: String,

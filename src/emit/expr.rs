@@ -43,6 +43,7 @@ fn emit_rule(rule: &IrRule, params: &ParamValues) -> RuleSource {
         priority: crate::eval::priority(rule, params),
         category: env::category_name(rule.category.0).to_string(),
         exclusive: rule.exclusive,
+        because: rule.because.clone(),
         action: emit_action(rule, params),
         condition,
     }
