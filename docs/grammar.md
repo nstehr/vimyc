@@ -7,7 +7,7 @@
 ; A named expression, inlined at its call sites. Only earlier defs are in
 ; scope, so nothing here can recurse. See docs/design.md, "def".
 <def>            ::= "def" <name> "(" [ <def-params> ] ")" "=" <expr>
-<def-params>     ::= <def-param> ( "," <def-param> )*
+<def-params>     ::= <def-param> ( "," <def-param> )* [ "," ]
 <def-param>      ::= <name> ":" <param-type>
 
 ; A doctrine input: file-scoped, constant within a doctrine window, supplied
@@ -29,8 +29,10 @@
                    | <require>
 
 ; An expression so a doctrine can set it, but one the type checker restricts to
-; parameters, literals and `lerp` — the engine sorts on priority, so it must be
-; decidable before the first tick rather than from game state.
+; parameters, literals and builtins — the engine sorts on priority, so it must
+; be decidable before the first tick rather than from game state. The same rule
+; applies to a predicate's or an action's arguments, for the same reason: a
+; state key is built from them before any tick happens.
 <priority>       ::= "priority" <expr>
 <category>       ::= "category" <name> [ "exclusive" ]
 ; An action takes arguments when it is built by a factory —
@@ -112,9 +114,10 @@
                    | "require" | "because" | "let" | "and" | "or" | "not"
                    | "exists" | "param" | "def" | "int" | "float"
 
-; Builtins are ordinary call syntax, not keywords: `lerp`, `lerpf`, `max`,
-; `min`, `trunc`, `select`. They are rejected as binding and parameter names by
-; the checker, not by the grammar.
+; Builtins and defs are ordinary call syntax, not keywords. The builtins are
+; `lerp`, `lerpf`, `max`, `min`, `trunc`, `round2` and `select`; a def is
+; whatever the file declared. Both are rejected as binding, parameter and def
+; names by the checker, not by the grammar.
 
 ; Whitespace separates tokens and is otherwise insignificant.
 ```

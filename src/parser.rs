@@ -79,13 +79,12 @@ impl<'a> Parser<'a> {
             self.error(self.peek_span(), "expected `(` after the def name".into());
             return None;
         }
-        if !self.at(&TokenKind::RParen) {
-            loop {
-                let p = self.def_param()?;
-                params.push(p);
-                if !self.eat(&TokenKind::Comma) {
-                    break;
-                }
+        // A trailing comma is allowed, as it is in a call's arguments — the two
+        // lists should not disagree about something so small.
+        while !self.at(&TokenKind::RParen) {
+            params.push(self.def_param()?);
+            if !self.eat(&TokenKind::Comma) {
+                break;
             }
         }
         if !self.eat(&TokenKind::RParen) {
@@ -764,5 +763,28 @@ mod tests {
             assert!(!diags.is_empty(), "`{src}` should not parse");
             assert!(ast.params.is_empty(), "`{src}` produced a param");
         }
+    }
+
+    /// A trailing comma is allowed in a def's parameters, as it is in a call's
+    /// arguments. They disagreed until someone wrote one.
+    #[test]
+    fn a_def_may_have_a_trailing_comma() {
+        let (ast, diags) = parse_str(
+            "def f(a: int, b: int,) = a > b\n\
+             rule r {\n priority 1\n category economy\n do scout\n \
+             require cash >= 1\n}\n",
+        );
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(ast.defs.len(), 1);
+        assert_eq!(ast.defs[0].params.len(), 2);
+
+        // And an empty list is still empty rather than one nameless parameter.
+        let (ast, diags) = parse_str(
+            "def g() = cash >= 1\n\
+             rule r {\n priority 1\n category economy\n do scout\n \
+             require cash >= 1\n}\n",
+        );
+        assert!(diags.is_empty(), "{diags:?}");
+        assert!(ast.defs[0].params.is_empty());
     }
 }

@@ -415,12 +415,21 @@ fn the_documented_grammar_parses_and_checks() {
     assert!(checked.warnings.is_empty(), "{:?}", checked.warnings);
 
     // The shapes the file is there to cover.
+    assert_eq!(ast.params.len(), 2, "param declarations");
+    assert_eq!(ast.defs.len(), 2, "def declarations");
+    assert_eq!(ast.defs[0].params.len(), 2, "def parameters");
+    assert!(ast.defs[1].params.is_empty(), "a def with no parameters");
+
     let r = &ast.rules[0];
     assert!(r.exclusive, "category modifier");
     assert!(r.because.is_some(), "because");
     assert_eq!(r.lets.len(), 2, "let bindings");
     assert_eq!(r.action.args.len(), 4, "action arguments");
-    assert_eq!(r.requires.len(), 9, "requires");
+    assert_eq!(r.requires.len(), 13, "requires");
+    assert!(
+        !matches!(r.priority.kind, vimyc::ast::ExprKind::Int(_)),
+        "a priority that is an expression, not a literal"
+    );
 
     let m = &ast.rules[1];
     assert!(!m.exclusive);
