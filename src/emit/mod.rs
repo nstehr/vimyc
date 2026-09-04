@@ -24,7 +24,10 @@ pub enum Artifact {
 }
 
 /// One rule, ready for the Go side: metadata plus a condition it can evaluate.
-#[derive(Debug)]
+///
+/// Serialised as-is into the build artifact, so the field names here are the
+/// JSON contract Go's loader reads.
+#[derive(Debug, serde::Serialize)]
 pub struct RuleSource {
     pub name: String,
     pub priority: i64,

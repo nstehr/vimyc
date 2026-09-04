@@ -1,5 +1,5 @@
-//! CLI. Currently `check` only; `docs/implementation.md` has the subcommands it
-//! is headed for (`fmt`, `eval`).
+//! CLI: check a rule set, optionally evaluate it against a state, or emit the
+//! build artifact Vimy embeds. `docs/implementation.md` has the rest.
 use std::env;
 use vimyc::check::check;
 use vimyc::diag::{Diagnostic, Severity, SourceFile};
@@ -16,9 +16,15 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let mut args = env::args().skip(1);
+    let mut args: Vec<String> = env::args().skip(1).collect();
+    // Emitting is silent on stdout apart from the artifact, so it can be
+    // redirected straight into a generated file.
+    let emit_json = args.iter().any(|a| a == "--json");
+    args.retain(|a| a != "--json");
+
+    let mut args = args.into_iter();
     let Some(path) = args.next() else {
-        return Err("no input file (usage: vimyc <file> [state.json])".into());
+        return Err("no input file (usage: vimyc <file> [state.json] [--json])".into());
     };
     let state_path = args.next();
 
@@ -51,6 +57,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
     report(&src, &checked.warnings);
+
+    if emit_json {
+        let vimyc::emit::Artifact::Expr(rules) =
+            vimyc::emit::emit(&checked.ir, vimyc::emit::Target::Expr);
+        println!("{}", serde_json::to_string_pretty(&rules)?);
+        return Ok(());
+    }
 
     if let Some(state_path) = state_path {
         let json =
