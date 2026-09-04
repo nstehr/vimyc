@@ -16,12 +16,13 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    const USAGE: &str = "usage: vimyc <file> [state.json] [--json|--vy] [--params <file>|-]";
+    const USAGE: &str = "usage: vimyc <file> [state.json] [--json|--vy] [--params <file>|-]\n       vimyc --keywords";
 
     // Explicit rather than scanning: `--params` with nothing after it used to
     // index past the end, and stray positional arguments vanished silently.
     let mut emit_json = false;
     let mut emit_vy = false;
+    let mut list_keywords = false;
     let mut params_path: Option<String> = None;
     let mut positional: Vec<String> = Vec::new();
     let mut args = env::args().skip(1);
@@ -32,6 +33,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "--json" => emit_json = true,
             // The rule set as it stands after the doctrine, for reading.
             "--vy" => emit_vy = true,
+            // The language describing itself, for a highlighter that cannot
+            // fall behind it.
+            "--keywords" => list_keywords = true,
             // A flat object of parameter name to number.
             "--params" => {
                 params_path = Some(
@@ -44,6 +48,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             _ => positional.push(arg),
         }
+    }
+
+    if list_keywords {
+        for k in vimyc::token::TokenKind::KEYWORDS {
+            println!("{k}");
+        }
+        return Ok(());
     }
 
     let mut positional = positional.into_iter();

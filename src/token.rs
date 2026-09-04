@@ -72,6 +72,16 @@ pub enum TokenKind {
 
 impl TokenKind {
     /// Maps an already-scanned identifier to its keyword kind, if it is one.
+    /// Every keyword, for anything that needs the list rather than the lookup —
+    /// the syntax highlighting in Vimy's dashboard is generated from this, so it
+    /// cannot fall behind the language.
+    ///
+    /// `keywords_match_the_lookup` keeps the two in step.
+    pub const KEYWORDS: &'static [&'static str] = &[
+        "rule", "priority", "category", "exclusive", "do", "require", "because", "let", "and",
+        "or", "not", "exists", "param", "def", "int", "float",
+    ];
+
     pub fn keyword(s: &str) -> Option<TokenKind> {
         Some(match s {
             "rule" => TokenKind::Rule,
@@ -92,5 +102,32 @@ impl TokenKind {
             "float" => TokenKind::FloatType,
             _ => return None,
         })
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::TokenKind;
+
+    /// The list and the lookup are two spellings of one fact, and the list is
+    /// what the dashboard's highlighting is built from — so a keyword added to
+    /// one and not the other would show up as a word that stops being a keyword
+    /// on screen while still being one to the compiler.
+    #[test]
+    fn keywords_match_the_lookup() {
+        for k in TokenKind::KEYWORDS {
+            assert!(
+                TokenKind::keyword(k).is_some(),
+                "`{k}` is listed but the lexer does not know it"
+            );
+        }
+        // And nothing the lexer knows is missing from the list. There is no way
+        // to enumerate the lookup, so this checks the words a `.vy` file may
+        // contain: every keyword is lower-case ASCII, and the list is sorted by
+        // nothing in particular, so length is the only cheap invariant left.
+        assert_eq!(
+            TokenKind::KEYWORDS.len(),
+            16,
+            "a keyword was added or removed; update KEYWORDS and this count"
+        );
     }
 }
