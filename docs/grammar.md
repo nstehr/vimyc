@@ -2,7 +2,12 @@
 ; Lines beginning with `;` are comments on this grammar, not language syntax.
 ; The language itself has no comment form — see `because`.
 
-<program>        ::= <rule>*
+<program>        ::= ( <param> | <rule> )*
+
+; A doctrine input: file-scoped, constant within a doctrine window, supplied
+; from outside the file. See docs/design.md, "Parameters".
+<param>          ::= "param" <name> ":" <param-type>
+<param-type>     ::= "int" | "float"
 
 <rule>           ::= "rule" <name> "{" <rule-body> "}"
 
@@ -17,7 +22,10 @@
                    | <let>
                    | <require>
 
-<priority>       ::= "priority" <integer>
+; An expression so a doctrine can set it, but one the type checker restricts to
+; parameters, literals and `lerp` — the engine sorts on priority, so it must be
+; decidable before the first tick rather than from game state.
+<priority>       ::= "priority" <expr>
 <category>       ::= "category" <name> [ "exclusive" ]
 ; An action takes arguments when it is built by a factory —
 ; `form-squad(ground-attack, Ground, 8, Attack)`. Whether a given action takes
@@ -96,7 +104,7 @@
 
 <keyword>        ::= "rule" | "priority" | "category" | "exclusive" | "do"
                    | "require" | "because" | "let" | "and" | "or" | "not"
-                   | "exists"
+                   | "exists" | "param" | "int" | "float"
 
 ; Whitespace separates tokens and is otherwise insignificant.
 ```

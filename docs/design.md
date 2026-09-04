@@ -291,6 +291,85 @@ structurally can't do:
 - guards on if/else rule pairs that don't partition (`defend-base` versus
   `form-defense-squad` + `squad-defend-base`)
 
+## Parameters
+
+A doctrine is not a program. Measured across 49 rule sets from real games, what
+it varies is:
+
+| | |
+|---|---|
+| which rules exist | 81 of 91 are conditionally emitted; 10 always appear |
+| numeric thresholds | 38 conditions differ in text, 15 once numbers are blanked |
+| priority | 27 rules get different priorities under different doctrines |
+| the shape of a condition | essentially nothing |
+
+So `CompileDoctrine`'s 2000 lines produce almost no structural variety. It
+selects a subset of rules, sets numbers in them, and reorders them. That is
+small enough to say in the language:
+
+```
+param aggression: float
+param naval-weight: float
+param ground-attack-group-size: int
+
+rule form-naval-squad {
+  priority lerp(200, 400, aggression)
+  category squad-form
+  require naval-weight >= 0.3
+  require count(unassigned-idle-naval) >= ground-attack-group-size
+  do form-squad(naval-attack, Naval, ground-attack-group-size, Attack)
+}
+```
+
+The `require naval-weight >= 0.3` line is Go's `if c.d.NavalWeight >=
+DoctrineSignificant { emit ... }`, moved into the language. A doctrine gate and
+a game-state condition stop being different kinds of thing.
+
+### Two phases, and why the checker can enforce them
+
+A parameter is constant within a doctrine window; game state changes every tick.
+That difference is what makes `priority` expressible at all — it is metadata the
+engine sorts by, so it has to be decidable before the tick begins.
+
+**A priority may mention parameters, literals and `lerp`, but never a
+predicate.** `priority cash` is a type error, not a runtime surprise. The phase
+separation is a property the type checker holds rather than a convention.
+
+### `lerp` and `lerpf`
+
+The only two builtins, because they are the only two arithmetic shapes Go uses
+on a doctrine value: 66 calls to `lerp` and 5 to `lerpf` across the compiler,
+and nothing else.
+
+```
+lerp(min: int, max: int, t: float) -> int      ; rounds
+lerpf(min: float, max: float, t: float) -> float
+```
+
+Not predicates: they read no state, which is exactly why they are allowed in a
+priority.
+
+### Binding time is not a design decision
+
+Given the same source, a parameter can be resolved either way:
+
+- **folded by vimyc** when a doctrine lands, emitting a fresh artifact to swap
+  in — `CompileDoctrine` rewritten declaratively, needing vimyc at runtime
+- **read by the engine** at evaluation time, with the doctrine's values answered
+  by `RuleEnv` like any other question — one artifact, compiled at build time,
+  no Rust in production
+
+Same file, same semantics; the substitution simply happens somewhere else.
+Priorities are the one thing that must be folded per doctrine either way, since
+the engine sorts on them. Deferring this choice is most of the reason to put
+parameters in the language rather than to keep templating rule text in Go.
+
+### Not parameters
+
+Doctrine also carries `PreferredInfantry` and friends — `[]string` preferences
+consumed by `SetPreferences`, not by any rule. They stay where they are. A
+parameter is a number a rule can read.
+
 ## Formatting
 
 ```
@@ -386,7 +465,10 @@ actually needs.
 
 ## Deliberately out of scope for v0
 
-`reserve` declarations, doctrine parameter declarations, rule-level guards
-(`rule x when tech-priority > 0.4`), `any(...)`, wasm codegen, actions with
-arguments, LLM authoring. All needed later, none needed to take 13 rules through
-to a working interpreter.
+`reserve` declarations, `any(...)`, wasm codegen, LLM authoring. All needed
+later, none needed to take 13 rules through to a working interpreter.
+
+Two have since landed. Actions with arguments arrived with the seed port.
+Doctrine parameters are specified above; the rule-level guard they were paired
+with turned out to be unnecessary — a guard is a `require` over a parameter, and
+giving it its own syntax would have made two spellings of one idea.
