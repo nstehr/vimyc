@@ -42,6 +42,24 @@ fn corpus() -> Option<RealCorpus> {
     Some(serde_json::from_str(&text).unwrap_or_else(|e| panic!("{path}: {e}")))
 }
 
+fn summarise(diags: &[vimyc::diag::Diagnostic]) -> String {
+    diags
+        .iter()
+        .take(5)
+        .map(|d| format!("  {}", d.message))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Parses, checks and lowers — the only route to an `Ir`.
+fn ir(src: &str, which: usize) -> vimyc::ir::Ir {
+    let ast = parse(src, which);
+    match vimyc::check::check(&ast) {
+        Ok(c) => c.ir,
+        Err(diags) => panic!("rule set {which} does not check:\n{}", summarise(&diags)),
+    }
+}
+
 fn parse(src: &str, which: usize) -> vimyc::ast::Ast {
     let (tokens, ld) = vimyc::lexer::lex(src);
     assert!(ld.is_empty(), "rule set {which} does not lex: {ld:?}");
@@ -52,9 +70,9 @@ fn parse(src: &str, which: usize) -> vimyc::ast::Ast {
 
 /// Every rule set a real game ran parses and type checks.
 ///
-/// Priority collisions are excluded: they are real findings about Vimy rather
-/// than about the translation, and are tracked as vimy-axv. Everything else
-/// must be clean.
+/// Priority collisions are allowed through: they are real findings about Vimy
+/// rather than about the translation, and are tracked as vimy-axv. Nothing else
+/// may even warn.
 #[test]
 fn real_rule_sets_check() {
     let Some(c) = corpus() else {
@@ -63,20 +81,22 @@ fn real_rule_sets_check() {
     };
     for (i, src) in c.rule_sets.iter().enumerate() {
         let ast = parse(src, i);
-        let diags: Vec<_> = vimyc::check::check(&ast)
+        let checked = vimyc::check::check(&ast).unwrap_or_else(|diags| {
+            panic!(
+                "rule set {i} ({} rules) does not check:\n{}",
+                ast.rules.len(),
+                summarise(&diags)
+            )
+        });
+        let unexpected: Vec<_> = checked
+            .warnings
             .into_iter()
             .filter(|d| !d.message.contains("share priority"))
             .collect();
         assert!(
-            diags.is_empty(),
-            "rule set {i} ({} rules) does not type check:\n{}",
-            ast.rules.len(),
-            diags
-                .iter()
-                .take(5)
-                .map(|d| format!("  {}", d.message))
-                .collect::<Vec<_>>()
-                .join("\n")
+            unexpected.is_empty(),
+            "rule set {i} warns unexpectedly:\n{}",
+            summarise(&unexpected)
         );
     }
     eprintln!(
@@ -102,7 +122,7 @@ fn agrees_with_a_real_game() {
         .rule_sets
         .iter()
         .enumerate()
-        .map(|(i, s)| vimyc::lower::lower(&parse(s, i)))
+        .map(|(i, s)| ir(s, i))
         .collect();
 
     let mut checked = 0usize;
@@ -177,9 +197,9 @@ fn emitted_expr_round_trips_on_a_real_game() {
     let mut checked = 0usize;
 
     for (i, src) in c.rule_sets.iter().enumerate() {
-        let ir = vimyc::lower::lower(&parse(src, i));
+        let lowered = ir(src, i);
         let vimyc::emit::Artifact::Expr(emitted) =
-            vimyc::emit::emit(&ir, vimyc::emit::Target::Expr);
+            vimyc::emit::emit(&lowered, vimyc::emit::Target::Expr);
 
         for rule in &emitted {
             let Some(want) = c.conditions[i].get(&rule.name) else {

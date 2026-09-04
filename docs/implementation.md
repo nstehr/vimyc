@@ -3,18 +3,23 @@
 How the compiler fits together, and the decisions that are expensive to reverse.
 
 ```
-source ──lexer──> tokens ──parser──> ast ──types──> checked ast ──eval──> bool
+source ──lexer──> tokens ──parser──> ast ──check──> ir ──┬──eval──> bool
+                                                         └──emit──> expr
 ```
 
 | module | job |
 |---|---|
-| `diag` | spans, source-mapped errors |
+| `diag` | spans, severities, source-mapped errors |
 | `lexer` | text to tokens |
 | `ast` | the tree |
 | `parser` | tokens to tree, hand-written recursive descent |
 | `env` | the predicate surface |
-| `types` | type checking |
-| `eval` | tree-walking interpreter |
+| `types` | the type lattice and enum domains |
+| `check` | type checking, and the only route to an `Ir` |
+| `ir` | names resolved to ids, bindings to slots |
+| `lower` | `Ast → Ir`, crate-private |
+| `eval` | tree-walking interpreter over the IR |
+| `emit` | backends; `expr` is the first |
 | `fmt` | canonical formatting |
 
 All hand-written on purpose. The one dependency worth reaching for eventually is
@@ -23,7 +28,8 @@ boring.
 
 ## Order to build in
 
-`Span` → lexer → the rest of `diag` → ast → parser → types → eval.
+`Span` → lexer → the rest of `diag` → ast → parser → check → eval → ir → lower
+→ emit.
 
 `diag` splits in two. `Span` is about ten lines and the lexer can't emit tokens
 without it, so it comes first. The rendering half — `SourceFile`, `line_col`,
@@ -256,16 +262,29 @@ does: "which conjunct was false for 1,400 ticks" has to point at source, and
 
 ### Decisions this forces
 
-**`check` returns a `Result`.** Lowering can only run on a clean tree, so
-`check(ast) -> Result<Ir, Vec<Diagnostic>>` rather than the
-`(thing, Vec<Diagnostic>)` shape used elsewhere. Parse can return a tree with
-holes; lowering cannot.
+**`check` returns a `Result`.** Lowering can only run on a clean tree, so it is
+the `Result` shape rather than the `(thing, Vec<Diagnostic>)` used elsewhere.
+Parse can return a tree with holes; lowering cannot.
 
-**Errors and warnings need separating first.** Priority collisions are currently
-errors, and they are what found `vimy-axv` — but a rule set that trips one is
-still perfectly lowerable, it just has a latent bug. Every real doctrine trips
-it, so either they become warnings or every consumer filters them forever.
-Splitting the two is the smaller change.
+```
+check(ast) -> Result<Checked, Vec<Diagnostic>>   // Checked { ir, warnings }
+```
+
+Warnings ride on the `Ok` side so they are not lost by succeeding, and the `Err`
+side carries both kinds so a warning is not lost by an error appearing next to
+it. `lower` is `pub(crate)`, which is what makes its panics sound: the only path
+to an `Ir` runs through a check that passed, so "unresolved name here means a
+compiler bug" is enforced rather than merely documented.
+
+**Errors and warnings are separated by soundness, not by severity of
+consequence.** An error means the rule set cannot be lowered. A warning means it
+lowers to something that runs but is near-certainly wrong.
+
+That puts both whole-set passes on the warning side. Priority collisions were
+errors, and they are what found `vimy-axv` — but every real doctrine trips one,
+so as errors they forced every consumer to filter by matching on the message
+text. `real_rule_sets_check` did exactly that, and now says what it means:
+`check` must succeed, and nothing may warn except a priority collision.
 
 **`count` resolves at lowering.** It is the one overloaded name, and the IR
 should carry `Predicate(BuildingCount, …)` or `Predicate(IdleGroundUnits, …)`

@@ -45,6 +45,16 @@ fn seed_source() -> String {
     std::fs::read_to_string(path).unwrap_or_else(|e| panic!("read seed.vy: {e}"))
 }
 
+/// Checks and lowers, which is the only route to an `Ir`. Panics on an error
+/// and ignores warnings — the seed set has none, and `seed_type_checks` is
+/// where that is asserted.
+fn lower_checked(ast: &vimyc::ast::Ast) -> vimyc::ir::Ir {
+    match vimyc::check::check(ast) {
+        Ok(c) => c.ir,
+        Err(diags) => panic!("does not check: {diags:?}"),
+    }
+}
+
 fn parse_seed() -> vimyc::ast::Ast {
     let src = seed_source();
     let (tokens, lex_diags) = vimyc::lexer::lex(&src);
@@ -130,8 +140,12 @@ fn seed_preserves_rule_order() {
 #[test]
 fn seed_type_checks() {
     let ast = parse_seed();
-    let diags = vimyc::check::check(&ast);
-    assert!(diags.is_empty(), "seed.vy does not type check: {diags:?}");
+    let checked = vimyc::check::check(&ast).expect("seed.vy does not type check");
+    assert!(
+        checked.warnings.is_empty(),
+        "seed.vy warns: {:?}",
+        checked.warnings
+    );
 }
 
 /// The checks that make the language worth having. Each of these is accepted by
@@ -143,10 +157,10 @@ fn typos_are_caught() {
         assert!(lex_diags.is_empty(), "{lex_diags:?}");
         let (ast, parse_diags) = vimyc::parser::parse(&tokens);
         assert!(parse_diags.is_empty(), "{parse_diags:?}");
-        vimyc::check::check(&ast)
-            .into_iter()
-            .map(|d| d.message)
-            .collect()
+        match vimyc::check::check(&ast) {
+            Ok(c) => c.warnings.into_iter().map(|d| d.message).collect(),
+            Err(diags) => diags.into_iter().map(|d| d.message).collect(),
+        }
     }
 
     fn rule_with(require: &str) -> String {
@@ -224,7 +238,7 @@ fn the_differential_corpus_exercises_every_conjunct() {
     let corpus = differential_corpus();
     let cases = &corpus.cases;
     let src = seed_source();
-    let ir = vimyc::lower::lower(&parse_seed());
+    let ir = lower_checked(&parse_seed());
 
     let mut counts: Vec<Vec<(usize, usize)>> = ir
         .rules
@@ -318,7 +332,7 @@ fn differential_corpus() -> DifferentialCorpus {
 fn seed_agrees_with_expr() {
     let corpus = differential_corpus();
     let cases = &corpus.cases;
-    let ir = vimyc::lower::lower(&parse_seed());
+    let ir = lower_checked(&parse_seed());
 
     let mut checked = 0usize;
     let mut mismatches = Vec::new();
@@ -378,8 +392,8 @@ fn the_documented_grammar_parses_and_checks() {
     assert!(ld.is_empty(), "{ld:?}");
     let (ast, pd) = vimyc::parser::parse(&tokens);
     assert!(pd.is_empty(), "{pd:?}");
-    let diags = vimyc::check::check(&ast);
-    assert!(diags.is_empty(), "{diags:?}");
+    let checked = vimyc::check::check(&ast).expect("grammar.vy does not check");
+    assert!(checked.warnings.is_empty(), "{:?}", checked.warnings);
 
     // The shapes the file is there to cover.
     let r = &ast.rules[0];
@@ -402,7 +416,7 @@ fn the_documented_grammar_parses_and_checks() {
 /// something it should not have — so simply running it is the assertion.
 #[test]
 fn seed_lowers() {
-    let ir = vimyc::lower::lower(&parse_seed());
+    let ir = lower_checked(&parse_seed());
     assert_eq!(ir.rules.len(), 13);
 
     // `count(powr)` and `count(idle-ground-units)` are different predicates
@@ -433,7 +447,7 @@ fn real_rule_sets_lower() {
         assert!(ld.is_empty(), "rule set {i}: {ld:?}");
         let (ast, pd) = vimyc::parser::parse(&tokens);
         assert!(pd.is_empty(), "rule set {i}: {pd:?}");
-        let ir = vimyc::lower::lower(&ast);
+        let ir = lower_checked(&ast);
         assert_eq!(ir.rules.len(), ast.rules.len(), "rule set {i}");
     }
     eprintln!("{} real rule sets lower", c.rule_sets.len());
@@ -450,7 +464,7 @@ fn real_rule_sets_lower() {
 /// hands and spacing is not meaning.
 #[test]
 fn emitted_expr_round_trips_to_go() {
-    let ir = vimyc::lower::lower(&parse_seed());
+    let ir = lower_checked(&parse_seed());
     let vimyc::emit::Artifact::Expr(emitted) = vimyc::emit::emit(&ir, vimyc::emit::Target::Expr);
 
     let expected = seed();
@@ -496,9 +510,10 @@ fn emit_one(requires: &str) -> String {
     assert!(lex_diags.is_empty(), "{requires}: {lex_diags:?}");
     let (ast, parse_diags) = vimyc::parser::parse(&tokens);
     assert!(parse_diags.is_empty(), "{requires}: {parse_diags:?}");
-    let check_diags = vimyc::check::check(&ast);
-    assert!(check_diags.is_empty(), "{requires}: {check_diags:?}");
-    let ir = vimyc::lower::lower(&ast);
+    let ir = match vimyc::check::check(&ast) {
+        Ok(c) => c.ir,
+        Err(diags) => panic!("{requires}: {diags:?}"),
+    };
     let vimyc::emit::Artifact::Expr(rules) = vimyc::emit::emit(&ir, vimyc::emit::Target::Expr);
     rules[0].condition.clone()
 }

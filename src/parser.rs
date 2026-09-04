@@ -490,7 +490,7 @@ impl<'a> Parser<'a> {
     // ---- errors ----
 
     fn error(&mut self, span: Span, message: String) {
-        self.diags.push(Diagnostic { message, span });
+        self.diags.push(Diagnostic::error(span, message));
     }
 
     /// Panic-mode recovery: skip to the next `rule`. Only `parse` calls this,

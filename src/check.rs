@@ -7,13 +7,36 @@
 use crate::ast::{Action, Ast, BinOp, Expr, ExprKind, Name, Rule, UnOp};
 use crate::diag::{Diagnostic, Span};
 use crate::env;
+use crate::ir::Ir;
 use crate::types::{Domain, ParamType, Type};
 
+/// The result of a successful check: a rule set that can be lowered, plus
+/// anything worth saying about it that did not stop it.
+pub struct Checked {
+    pub ir: Ir,
+    pub warnings: Vec<Diagnostic>,
+}
+
+/// Checks a rule set and lowers it.
+///
+/// The only way to obtain an `Ir`, which is what makes `lower`'s panics sound:
+/// it cannot be handed a tree that did not check, because nothing else can call
+/// it. Errors and warnings both come back on failure, so a warning is not lost
+/// just because an error appeared next to it.
+///
 /// Collects rather than bailing, so one bad rule does not hide the rest.
-pub fn check(ast: &Ast) -> Vec<Diagnostic> {
+pub fn check(ast: &Ast) -> Result<Checked, Vec<Diagnostic>> {
     let mut checker = Checker::new();
     checker.run(ast);
-    checker.diags
+    let diags = checker.diags;
+
+    if diags.iter().any(Diagnostic::is_error) {
+        return Err(diags);
+    }
+    Ok(Checked {
+        ir: crate::lower::lower(ast),
+        warnings: diags,
+    })
 }
 
 /// Cross-rule state. Anything scoped to a single rule lives on `RuleChecker`
@@ -409,7 +432,7 @@ impl<'a> RuleChecker<'a> {
     }
 
     fn error(&mut self, span: Span, message: String) {
-        self.diags.push(Diagnostic { message, span });
+        self.diags.push(Diagnostic::error(span, message));
     }
 }
 
@@ -432,10 +455,7 @@ impl Checker {
                         "`{}` and `{}` share priority {} in category `{}`, so their order is undefined",
                         a.name.text, b.name.text, a.priority, a.category.text
                     );
-                    self.diags.push(Diagnostic {
-                        message: msg,
-                        span: b.name.span,
-                    });
+                    self.diags.push(Diagnostic::warning(b.name.span, msg));
                 }
             }
         }
@@ -470,10 +490,7 @@ impl Checker {
                         "`{}` can never fire: `{}` is exclusive, higher priority, and its conditions are implied by these",
                         lower.name.text, higher.name.text
                     );
-                    self.diags.push(Diagnostic {
-                        message: msg,
-                        span: lower.name.span,
-                    });
+                    self.diags.push(Diagnostic::warning(lower.name.span, msg));
                 }
             }
         }
@@ -545,17 +562,23 @@ mod tests {
     use crate::lexer::lex;
     use crate::parser::parse;
 
-    fn errors(src: &str) -> Vec<String> {
+    /// Every message, whichever side of the split it landed on. Most of these
+    /// tests care that a problem is *reported*; `severity_decides_what_lowers`
+    /// is where the split itself is pinned.
+    fn messages(src: &str) -> Vec<String> {
         let (tokens, ld) = lex(src);
         assert!(ld.is_empty(), "{ld:?}");
         let (ast, pd) = parse(&tokens);
         assert!(pd.is_empty(), "{pd:?}");
-        check(&ast).into_iter().map(|d| d.message).collect()
+        match check(&ast) {
+            Ok(c) => c.warnings.into_iter().map(|d| d.message).collect(),
+            Err(d) => d.into_iter().map(|d| d.message).collect(),
+        }
     }
 
     #[test]
     fn equal_priorities_in_one_category_are_reported() {
-        let e = errors(
+        let e = messages(
             "rule a {\n priority 5\n category economy\n do scout\n require cash >= 1\n}\n\
              rule b {\n priority 5\n category economy\n do scout\n require cash >= 2\n}\n",
         );
@@ -565,7 +588,7 @@ mod tests {
 
     #[test]
     fn equal_priorities_in_different_categories_are_fine() {
-        let e = errors(
+        let e = messages(
             "rule a {\n priority 5\n category economy\n do scout\n require cash >= 1\n}\n\
              rule b {\n priority 5\n category combat\n do scout\n require cash >= 2\n}\n",
         );
@@ -576,7 +599,7 @@ mod tests {
     fn a_rule_under_a_broader_exclusive_one_can_never_fire() {
         // `a` requires strictly less than `b`, so whenever `b` would fire `a`
         // already has, and `a` is exclusive.
-        let e = errors(
+        let e = messages(
             "rule a {\n priority 9\n category economy exclusive\n do scout\n require cash >= 1\n}\n\
              rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n require has-role(barracks)\n}\n",
         );
@@ -590,8 +613,8 @@ mod tests {
         let hi = "rule a {\n priority 9\n category economy exclusive\n do scout\n require cash >= 1\n}\n";
         let lo = "rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n require has-role(barracks)\n}\n";
 
-        let forward = errors(&format!("{hi}{lo}"));
-        let reversed = errors(&format!("{lo}{hi}"));
+        let forward = messages(&format!("{hi}{lo}"));
+        let reversed = messages(&format!("{lo}{hi}"));
         assert_eq!(forward.len(), 1, "{forward:?}");
         assert_eq!(reversed.len(), 1, "low-priority rule first: {reversed:?}");
         assert_eq!(forward, reversed);
@@ -599,7 +622,7 @@ mod tests {
 
     #[test]
     fn ordering_needs_numbers() {
-        let e = errors(
+        let e = messages(
             "rule r {\n priority 1\n category economy\n do scout\n require base-under-attack < enemies-visible\n}\n",
         );
         assert_eq!(e.len(), 1, "{e:?}");
@@ -608,7 +631,7 @@ mod tests {
 
     #[test]
     fn equality_still_works_on_bools() {
-        let e = errors(
+        let e = messages(
             "rule r {\n priority 1\n category economy\n do scout\n require base-under-attack == enemies-visible\n}\n",
         );
         assert!(e.is_empty(), "{e:?}");
@@ -617,7 +640,7 @@ mod tests {
     #[test]
     fn a_narrower_rule_above_does_not_shadow() {
         // `a` requires *more* than `b`, so `b` can still fire on its own.
-        let e = errors(
+        let e = messages(
             "rule a {\n priority 9\n category economy exclusive\n do scout\n require cash >= 1\n require has-role(barracks)\n}\n\
              rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n}\n",
         );
@@ -626,10 +649,38 @@ mod tests {
 
     #[test]
     fn a_non_exclusive_rule_above_does_not_shadow() {
-        let e = errors(
+        let e = messages(
             "rule a {\n priority 9\n category economy\n do scout\n require cash >= 1\n}\n\
              rule b {\n priority 5\n category economy\n do scout\n require cash >= 1\n require has-role(barracks)\n}\n",
         );
         assert!(e.is_empty(), "{e:?}");
+    }
+
+    /// The split is about soundness, not about how bad the problem is.
+    ///
+    /// A shadowed rule is near-certainly a mistake, but it lowers to something
+    /// that runs — so it warns and an `Ir` still comes back. A typo cannot be
+    /// lowered at all, so it errors and no `Ir` exists to misuse.
+    #[test]
+    fn severity_decides_what_lowers() {
+        let shadowed = "rule high {\n priority 9\n category economy exclusive\n do scout\n \
+                        require cash >= 1\n}\n\
+                        rule low {\n priority 1\n category economy\n do scout\n \
+                        require cash >= 1\n require has-role(barracks)\n}\n";
+        let (t, _) = lex(shadowed);
+        let (ast, pd) = parse(&t);
+        assert!(pd.is_empty(), "{pd:?}");
+        let checked = check(&ast).expect("a warning must not stop lowering");
+        assert_eq!(checked.warnings.len(), 1, "{:?}", checked.warnings);
+        assert!(checked.warnings[0].message.contains("can never fire"));
+        assert_eq!(checked.ir.rules.len(), 2);
+
+        let typo = "rule r {\n priority 1\n category economy\n do scout\n \
+                    require has-role(war-facotry)\n}\n";
+        let (t, _) = lex(typo);
+        let (ast, pd) = parse(&t);
+        assert!(pd.is_empty(), "{pd:?}");
+        let diags = check(&ast).err().expect("a typo must stop lowering");
+        assert!(diags.iter().all(|d| d.is_error()), "{diags:?}");
     }
 }

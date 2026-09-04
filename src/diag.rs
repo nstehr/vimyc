@@ -9,10 +9,45 @@ pub struct Span {
     pub end: u32,
 }
 
+/// Whether a diagnostic stops compilation.
+///
+/// The line is drawn at soundness, not at severity of consequence: an error
+/// means the rule set cannot be lowered, so `check` refuses to produce an `Ir`.
+/// A shadowed rule is almost certainly a mistake and still compiles to something
+/// that runs, so it warns.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Severity {
+    Error,
+    Warning,
+}
+
 #[derive(Debug)]
 pub struct Diagnostic {
+    pub severity: Severity,
     pub message: String,
     pub span: Span,
+}
+
+impl Diagnostic {
+    pub fn error(span: Span, message: impl Into<String>) -> Self {
+        Diagnostic {
+            severity: Severity::Error,
+            message: message.into(),
+            span,
+        }
+    }
+
+    pub fn warning(span: Span, message: impl Into<String>) -> Self {
+        Diagnostic {
+            severity: Severity::Warning,
+            message: message.into(),
+            span,
+        }
+    }
+
+    pub fn is_error(&self) -> bool {
+        self.severity == Severity::Error
+    }
 }
 
 pub struct SourceFile {

@@ -12,9 +12,10 @@ use crate::types::{Domain, ParamType, Type};
 
 /// Lowers a checked rule set.
 ///
-/// Panics rather than reporting: reaching an unresolved name means `check`
-/// accepted something it should not have.
-pub fn lower(ast: &Ast) -> Ir {
+/// Crate-private, and reachable only through `check`. That is what makes the
+/// panics below sound: an unresolved name here would mean `check` accepted
+/// something it should not have, not that a caller skipped it.
+pub(crate) fn lower(ast: &Ast) -> Ir {
     Ir {
         rules: ast.rules.iter().map(lower_rule).collect(),
     }

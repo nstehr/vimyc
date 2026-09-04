@@ -236,13 +236,13 @@ impl<'a> Lexer<'a> {
 
     /// Records a diagnostic spanning `self.start..self.pos`.
     fn error(&mut self, message: String) {
-        self.diags.push(Diagnostic {
-            message,
-            span: Span {
+        self.diags.push(Diagnostic::error(
+            Span {
                 start: self.start as u32,
                 end: self.pos as u32,
             },
-        });
+            message,
+        ));
     }
 }
 

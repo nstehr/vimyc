@@ -2,7 +2,7 @@
 //! is headed for (`fmt`, `eval`).
 use std::env;
 use vimyc::check::check;
-use vimyc::diag::{Diagnostic, SourceFile};
+use vimyc::diag::{Diagnostic, Severity, SourceFile};
 use vimyc::eval::evaluate;
 use vimyc::lexer::lex;
 use vimyc::parser::parse;
@@ -35,27 +35,28 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Type errors off the back of a syntax error are noise — the tree is full of
     // holes the parser already reported.
-    let type_diags = if parse_diags.is_empty() {
-        let d = check(&ast);
-        report(&src, &d);
-        d.len()
-    } else {
-        0
-    };
-
-    let errors = lex_diags.len() + parse_diags.len() + type_diags;
+    let errors = lex_diags.len() + parse_diags.len();
     if errors > 0 {
         return Err(format!("{errors} error(s)").into());
     }
+
+    // The only way to an `Ir`, so nothing below can run on a rule set that did
+    // not check.
+    let checked = match check(&ast) {
+        Ok(c) => c,
+        Err(diags) => {
+            report(&src, &diags);
+            let errors = diags.iter().filter(|d| d.is_error()).count();
+            return Err(format!("{errors} error(s)").into());
+        }
+    };
+    report(&src, &checked.warnings);
 
     if let Some(state_path) = state_path {
         let json =
             std::fs::read_to_string(&state_path).map_err(|e| format!("{state_path}: {e}"))?;
         let state: State = serde_json::from_str(&json).map_err(|e| format!("{state_path}: {e}"))?;
-        // Lowering only runs once the rule set has checked, so the errors above
-        // are all reported before anything here can panic.
-        let ir = vimyc::lower::lower(&ast);
-        for rule in evaluate(&ir, &state).fired {
+        for rule in evaluate(&checked.ir, &state).fired {
             println!(
                 "{:>5}  {:<20} {}",
                 rule.priority,
@@ -71,6 +72,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 fn report(src: &SourceFile, diags: &[Diagnostic]) {
     for d in diags {
         let lc = src.line_column(d.span.start);
-        eprintln!("{}:{}:{}: {}", src.name, lc.line, lc.col, d.message);
+        let label = match d.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        };
+        eprintln!(
+            "{}:{}:{}: {label}: {}",
+            src.name, lc.line, lc.col, d.message
+        );
     }
 }
