@@ -72,15 +72,22 @@ pub enum TokenKind {
 
 impl TokenKind {
     /// Maps an already-scanned identifier to its keyword kind, if it is one.
-    /// Every keyword, for anything that needs the list rather than the lookup —
-    /// the syntax highlighting in Vimy's dashboard is generated from this, so it
-    /// cannot fall behind the language.
+    /// Every keyword, for anything that needs the list rather than the lookup.
     ///
     /// `keywords_match_the_lookup` keeps the two in step.
     pub const KEYWORDS: &'static [&'static str] = &[
         "rule", "priority", "category", "exclusive", "do", "require", "because", "let", "and",
         "or", "not", "exists", "param", "def", "int", "float",
     ];
+
+    /// The operators, longest first — which is the order a lexer must try them
+    /// in and the order a regex alternation must list them in, so `<=` is not
+    /// read as `<` followed by `=`.
+    pub const OPERATORS: &'static [&'static str] =
+        &["<=", ">=", "==", "!=", "<", ">", "+", "-", "*", "/", "="];
+
+    /// Everything else with a fixed spelling.
+    pub const PUNCTUATION: &'static [&'static str] = &["{", "}", "(", ")", ",", ":"];
 
     pub fn keyword(s: &str) -> Option<TokenKind> {
         Some(match s {
@@ -112,6 +119,44 @@ mod tests {
     /// what the dashboard's highlighting is built from — so a keyword added to
     /// one and not the other would show up as a word that stops being a keyword
     /// on screen while still being one to the compiler.
+    /// The vocabulary the lexer will actually produce, against the tables that
+    /// describe it. Vimy's dashboard generates its syntax highlighting from
+    /// these, so a spelling missing here is a token that renders as plain text
+    /// while still compiling.
+    #[test]
+    fn the_token_tables_cover_what_the_lexer_lexes() {
+        use crate::lexer::lex;
+
+        for spelling in TokenKind::OPERATORS
+            .iter()
+            .chain(TokenKind::PUNCTUATION)
+            .chain(TokenKind::KEYWORDS)
+        {
+            let (tokens, diags) = lex(spelling);
+            assert!(diags.is_empty(), "`{spelling}` does not lex: {diags:?}");
+            // One token and the terminator: a spelling that lexes as two is one
+            // the table has wrong, which is how `<=` would go astray.
+            assert_eq!(
+                tokens.len(),
+                2,
+                "`{spelling}` lexed as {} tokens",
+                tokens.len() - 1
+            );
+        }
+
+        // And the reverse: every punctuation byte the lexer accepts is listed.
+        // `.` and `"` are absent on purpose — they only occur inside a float or
+        // a string, never alone.
+        for c in "{}(),:+-*/<>=".chars() {
+            let s = c.to_string();
+            assert!(
+                TokenKind::OPERATORS.contains(&s.as_str())
+                    || TokenKind::PUNCTUATION.contains(&s.as_str()),
+                "the lexer accepts `{c}` but no table lists it"
+            );
+        }
+    }
+
     #[test]
     fn keywords_match_the_lookup() {
         for k in TokenKind::KEYWORDS {

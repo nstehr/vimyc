@@ -122,6 +122,23 @@
 ; Whitespace separates tokens and is otherwise insignificant.
 ```
 
+## What is derived and what is not
+
+`parser.rs` is the grammar. This file describes it and nothing enforces the
+match, which is why the section below matters.
+
+The token vocabulary *is* derived: `TokenKind::{KEYWORDS, OPERATORS,
+PUNCTUATION}` are printed by `vimyc --tokens`, and Vimy's dashboard generates
+its syntax highlighting from them rather than keeping its own copy.
+`the_token_tables_cover_what_the_lexer_lexes` holds the tables to what the lexer
+actually accepts.
+
+Precedence is duplicated — `parser.rs` parses it and `emit/vy.rs` prints it —
+but the two are held in agreement structurally rather than by sharing code:
+`emitted_vy_round_trips` prints the IR, parses it back and requires the same
+conditions, compared exactly. A printer that disagreed with the parser about
+precedence fails it.
+
 ## Keeping this current
 
 The grammar is hand-written, so nothing enforces that it matches `parser.rs`.

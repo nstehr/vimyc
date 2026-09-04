@@ -16,13 +16,13 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    const USAGE: &str = "usage: vimyc <file> [state.json] [--json|--vy] [--params <file>|-]\n       vimyc --keywords";
+    const USAGE: &str = "usage: vimyc <file> [state.json] [--json|--vy] [--params <file>|-]\n       vimyc --tokens";
 
     // Explicit rather than scanning: `--params` with nothing after it used to
     // index past the end, and stray positional arguments vanished silently.
     let mut emit_json = false;
     let mut emit_vy = false;
-    let mut list_keywords = false;
+    let mut list_tokens = false;
     let mut params_path: Option<String> = None;
     let mut positional: Vec<String> = Vec::new();
     let mut args = env::args().skip(1);
@@ -35,7 +35,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "--vy" => emit_vy = true,
             // The language describing itself, for a highlighter that cannot
             // fall behind it.
-            "--keywords" => list_keywords = true,
+            "--tokens" => list_tokens = true,
             // A flat object of parameter name to number.
             "--params" => {
                 params_path = Some(
@@ -50,10 +50,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    if list_keywords {
-        for k in vimyc::token::TokenKind::KEYWORDS {
-            println!("{k}");
-        }
+    if list_tokens {
+        // Sections rather than one list: a highlighter needs to know which is
+        // which, and the operator order is load-bearing.
+        use vimyc::token::TokenKind;
+        println!("keyword {}", TokenKind::KEYWORDS.join(" "));
+        println!("operator {}", TokenKind::OPERATORS.join(" "));
+        println!("punctuation {}", TokenKind::PUNCTUATION.join(" "));
         return Ok(());
     }
 
