@@ -98,6 +98,11 @@ fn the_micro_block_matches_go() {
     block_matches_go("micro.vy");
 }
 
+#[test]
+fn the_core_block_matches_go() {
+    block_matches_go("core.vy");
+}
+
 fn block_matches_go(file: &str) {
     let Some(cases) = corpus() else {
         eprintln!("no acceptance corpus; run TestDumpAcceptanceCorpus");
@@ -187,5 +192,88 @@ fn block_matches_go(file: &str) {
     eprintln!(
         "{compared} rules from {file} across {} doctrines match Go",
         cases.len()
+    );
+}
+
+/// Every rule `CompileDoctrine` can emit is claimed by some block.
+///
+/// The per-block tests only compare the names their file defines, so a rule
+/// nobody ported would pass unnoticed everywhere. This is what says the port is
+/// finished rather than merely correct as far as it goes.
+#[test]
+fn the_blocks_cover_every_rule_go_emits() {
+    const BLOCKS: &[&str] = &[
+        "core.vy",
+        "economy.vy",
+        "buildings.vy",
+        "production.vy",
+        "combat.vy",
+        "micro.vy",
+    ];
+    let Some(cases) = corpus() else {
+        eprintln!("no acceptance corpus; run TestDumpAcceptanceCorpus");
+        return;
+    };
+
+    let mut ported: HashSet<String> = HashSet::new();
+    for file in BLOCKS {
+        let path = format!("{}/rules/{file}", env!("CARGO_MANIFEST_DIR"));
+        let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+        let (tokens, _) = vimyc::lexer::lex(&src);
+        let (ast, _) = vimyc::parser::parse(&tokens);
+        let ir = vimyc::check::check(&ast)
+            .unwrap_or_else(|d| panic!("{file}: {d:?}"))
+            .ir;
+        for r in &ir.rules {
+            assert!(
+                ported.insert(r.name.clone()),
+                "`{}` is defined by two blocks",
+                r.name
+            );
+        }
+    }
+
+    let mut go: HashSet<&str> = HashSet::new();
+    for case in &cases {
+        for r in &case.rules {
+            go.insert(&r.name);
+        }
+    }
+
+    let missing: Vec<&&str> = go.iter().filter(|n| !ported.contains(**n)).collect();
+    assert!(missing.is_empty(), "not ported: {missing:?}");
+
+    // A name Go never emits is not automatically wrong — `build-barracks-prereq`
+    // wants a doctrine with air, naval or tech but no vehicles, no infantry and
+    // no ground defense, and nothing in the corpus is shaped like that. What
+    // matters is that vimyc does not emit it either, since no per-block test
+    // would compare it.
+    let mut emitted: HashSet<String> = HashSet::new();
+    for file in BLOCKS {
+        let path = format!("{}/rules/{file}", env!("CARGO_MANIFEST_DIR"));
+        let src = std::fs::read_to_string(&path).expect("block");
+        let (tokens, _) = vimyc::lexer::lex(&src);
+        let (ast, _) = vimyc::parser::parse(&tokens);
+        for case in &cases {
+            let mut ir = vimyc::check::check(&ast).expect("checks").ir;
+            let params = vimyc::ir::ParamValues::bind(&ir, &case.params).expect("binds");
+            vimyc::specialise::specialise(&mut ir, &params);
+            emitted.extend(ir.rules.iter().map(|r| r.name.clone()));
+        }
+    }
+    let invented: Vec<&String> = emitted
+        .iter()
+        .filter(|n| !go.contains(n.as_str()))
+        .collect();
+    assert!(
+        invented.is_empty(),
+        "vimyc emits what Go does not: {invented:?}"
+    );
+
+    let unreachable: Vec<&String> = ported.difference(&emitted).collect();
+    eprintln!(
+        "{} rule names ported; {} unreachable for every doctrine, in Go too: {unreachable:?}",
+        ported.len(),
+        unreachable.len()
     );
 }
