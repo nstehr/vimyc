@@ -6,7 +6,7 @@
 //!
 //! Reasoning is in `docs/implementation.md`.
 
-use crate::ast::{Action, Ast, BinOp, Expr, ExprKind, Let, Name, Param, Rule, UnOp};
+use crate::ast::{Action, Ast, BinOp, Expr, ExprKind, Let, Name, Param, ParamKind, Rule, UnOp};
 use crate::diag::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
 
@@ -54,10 +54,36 @@ impl<'a> Parser<'a> {
 
     /// `param aggression: float`
     ///
-    /// Declaration order is the slot order lowering assigns, so this must
-    /// preserve it.
     fn param(&mut self) -> Option<Param> {
-        todo!("parse a param declaration")
+        let start = self.peek_span();
+        if !self.eat(&TokenKind::Param) {
+            self.error(start, "expected `param`".into());
+            return None;
+        }
+        let name = self.name()?;
+        let colon = self.peek_span();
+        if !self.eat(&TokenKind::Colon) {
+            self.error(colon, "expected `:` after the param name".into());
+            return None;
+        }
+        let kind = match self.peek() {
+            TokenKind::FloatType => ParamKind::Float,
+            TokenKind::IntType => ParamKind::Int,
+            _ => {
+                self.error(
+                    self.peek_span(),
+                    "expected `float` or `int` after `:`".into(),
+                );
+                return None;
+            }
+        };
+        let end = self.peek_span();
+        self.bump();
+        Some(Param {
+            kind,
+            name,
+            span: start.to(end),
+        })
     }
 
     fn rule(&mut self) -> Option<Rule> {
@@ -506,9 +532,10 @@ impl<'a> Parser<'a> {
     /// never comes through here. See `docs/implementation.md`, "Error recovery".
     fn recover(&mut self) {
         // Deliberately no unconditional bump first: that would swallow the very
-        // rule this is aiming for. Progress is still guaranteed, because `rule`
-        // returns `None` on a `rule` token only after consuming it.
-        while !self.at_end() && !self.at(&TokenKind::Rule) {
+        // construct this is aiming for. Progress is still guaranteed, because
+        // both `rule` and `param` consume their keyword before they can return
+        // `None` on it.
+        while !self.at_end() && !self.at(&TokenKind::Rule) && !self.at(&TokenKind::Param) {
             self.bump();
         }
     }
@@ -585,5 +612,65 @@ mod tests {
             "the rule after a broken one must still parse"
         );
         assert_eq!(ast.rules[0].name.text, "after-it");
+    }
+
+    #[test]
+    fn params_parse_in_declaration_order() {
+        let (ast, diags) = parse_str(
+            "param aggression: float\nparam group-size: int\n\
+             rule r {\n priority 1\n category economy\n do scout\n require cash >= 1\n}\n",
+        );
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(ast.rules.len(), 1);
+
+        // Order is the slot order lowering assigns, so it is load-bearing.
+        let got: Vec<_> = ast
+            .params
+            .iter()
+            .map(|p| (p.name.text.as_str(), p.kind))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("aggression", ParamKind::Float),
+                ("group-size", ParamKind::Int)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_param_span_covers_its_type() {
+        let src = "param aggression: float\n";
+        let (ast, _) = parse_str(src);
+        let span = ast.params[0].span;
+        assert_eq!(&src[span.start as usize..span.end as usize], src.trim_end());
+    }
+
+    /// `recover` breaks on `param` as well as `rule`, so one bad declaration
+    /// costs only itself. Without that, this would skip forward to the rule and
+    /// the second parameter would vanish.
+    #[test]
+    fn a_broken_param_does_not_eat_the_next_one() {
+        let (ast, diags) = parse_str(
+            "param aggression: nonsense\nparam group-size: int\n\
+             rule r {\n priority 1\n category economy\n do scout\n require cash >= 1\n}\n",
+        );
+        assert!(!diags.is_empty(), "the bad type should be reported");
+        assert_eq!(ast.params.len(), 1, "the second param must still parse");
+        assert_eq!(ast.params[0].name.text, "group-size");
+        assert_eq!(ast.rules.len(), 1, "and the rule after it");
+    }
+
+    #[test]
+    fn a_param_missing_its_type_is_reported() {
+        for src in [
+            "param aggression\n",
+            "param aggression:\n",
+            "param: float\n",
+        ] {
+            let (ast, diags) = parse_str(src);
+            assert!(!diags.is_empty(), "`{src}` should not parse");
+            assert!(ast.params.is_empty(), "`{src}` produced a param");
+        }
     }
 }

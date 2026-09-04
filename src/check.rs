@@ -4,7 +4,7 @@
 //! no type of their own and must be *checked* against what a parameter expects.
 //! `docs/design.md` covers the resolution rules under "Types".
 
-use crate::ast::{Action, Ast, BinOp, Expr, ExprKind, Name, Rule, UnOp};
+use crate::ast::{Action, Ast, BinOp, Expr, ExprKind, Name, ParamKind, Rule, UnOp};
 use crate::diag::{Diagnostic, Span};
 use crate::env;
 use crate::ir::Ir;
@@ -48,6 +48,38 @@ struct Checker {
     params: Vec<(String, Type)>,
 }
 
+/// Which of the two evaluations an expression belongs to.
+///
+/// A priority is resolved once, when a doctrine lands; a condition runs every
+/// tick. `Static` is what makes that separation a type error rather than a
+/// convention — see `docs/design.md`, "Two phases".
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Phase {
+    Static,
+    Tick,
+}
+
+/// Why a name may not be introduced, or `None` if it is free.
+///
+/// Shared by `bind` and `declare_params`: a `let` and a `param` are different
+/// things, but what they may not be called is the same list, and a fourth copy
+/// of it would drift.
+fn reserved(name: &str) -> Option<String> {
+    if env::predicate(name).is_some() {
+        return Some(format!("`{name}` is a predicate"));
+    }
+    if env::builtin(name).is_some() {
+        return Some(format!("`{name}` is a builtin"));
+    }
+    // Enum literals resolve by position, not through scope — so `powr` would
+    // mean the binding in `cash > powr` and the building in `count(powr)`. One
+    // name, two meanings, one rule.
+    if let Some(d) = env::domains_containing(name).first() {
+        return Some(format!("`{name}` is a {}", d.name()));
+    }
+    None
+}
+
 /// One rule's checking pass.
 ///
 /// The scope lives here rather than on `Checker` so a stale binding is
@@ -58,8 +90,9 @@ struct RuleChecker<'a> {
     /// A `Vec` because there are no nested scopes and a handful of bindings.
     scope: Vec<(String, Type)>,
     /// Borrowed from `Checker`: parameters outlive every rule.
-    #[allow(dead_code, reason = "read once `priority` and `ident` resolve params")]
     params: &'a [(String, Type)],
+    /// Which evaluation the expression being checked belongs to.
+    phase: Phase,
 }
 
 impl Checker {
@@ -79,6 +112,7 @@ impl Checker {
                 diags: &mut self.diags,
                 scope: Vec::new(),
                 params: &self.params,
+                phase: Phase::Tick,
             }
             .rule(rule);
         }
@@ -89,10 +123,32 @@ impl Checker {
     /// Records the declared parameters, rejecting duplicates and any name that
     /// would shadow a predicate or a builtin.
     fn declare_params(&mut self, params: &[crate::ast::Param]) {
-        if params.is_empty() {
-            return;
+        for p in params {
+            let name = &p.name.text;
+            let ty = match p.kind {
+                ParamKind::Int => Type::Int,
+                ParamKind::Float => Type::Float,
+            };
+
+            // Recorded even when rejected, as `Type::Error`. Leaving it out
+            // would turn one bad declaration into an "unknown name" at every
+            // use — the same cascade `synth` avoids.
+            let bad = reserved(name)
+                .map(|why| format!("{why} and cannot be a parameter"))
+                .or_else(|| {
+                    self.params
+                        .iter()
+                        .any(|(n, _)| n == name)
+                        .then(|| format!("`{name}` is declared twice"))
+                });
+            match bad {
+                Some(msg) => {
+                    self.diags.push(Diagnostic::error(p.name.span, msg));
+                    self.params.push((name.clone(), Type::Error));
+                }
+                None => self.params.push((name.clone(), ty)),
+            }
         }
-        todo!("record each param's type; reject duplicates and predicate names")
     }
 }
 
@@ -129,11 +185,12 @@ impl<'a> RuleChecker<'a> {
     /// separates the two phases, and it is a type error rather than a
     /// convention — see `docs/design.md`.
     fn priority(&mut self, e: &Expr) {
-        // A bare number is trivially static and trivially `Int`.
-        if matches!(e.kind, ExprKind::Int(_)) {
-            return;
-        }
-        todo!("synthesise `e` with predicates rejected, then check it is Int")
+        // Restored unconditionally: `rule` checks the priority before the
+        // bindings and requires, so a leaked `Static` would reject every
+        // predicate in the rest of the rule.
+        self.phase = Phase::Static;
+        self.check_expr(e, &Type::Int);
+        self.phase = Phase::Tick;
     }
 
     /// An action name, and its arguments when it takes any.
@@ -178,17 +235,16 @@ impl<'a> RuleChecker<'a> {
     /// A rule where `cash` means something other than cash is the confusion this
     /// language exists to prevent.
     fn bind(&mut self, name: &Name, ty: Type) {
-        if env::predicate(&name.text).is_some() {
-            let msg = format!("`{}` is a predicate and cannot be rebound", name.text);
+        if let Some(why) = reserved(&name.text) {
+            let msg = format!("{why} and cannot be rebound");
             self.error(name.span, msg);
             return;
         }
-        // Enum literals resolve by position, not through scope — so `powr`
-        // would mean the binding in `cash > powr` and the building in
-        // `count(powr)`. One name, two meanings, one rule.
-        let domains = env::domains_containing(&name.text);
-        if let Some(d) = domains.first() {
-            let msg = format!("`{}` is a {} and cannot be rebound", name.text, d.name());
+        // Lowering resolves the rule scope before the parameter table, so
+        // without this the meaning of a shadowed name would depend on the order
+        // two passes happen to look things up.
+        if self.params.iter().any(|(n, _)| *n == name.text) {
+            let msg = format!("`{}` is a parameter and cannot be rebound", name.text);
             self.error(name.span, msg);
             return;
         }
@@ -216,25 +272,19 @@ impl<'a> RuleChecker<'a> {
             ExprKind::Error => Type::Error,
             ExprKind::Call(n, args) => {
                 if n.text == env::COUNT {
+                    if self.phase == Phase::Static {
+                        return self.not_in_a_priority(&n.text, n.span);
+                    }
                     self.count(args, n.span)
+                } else if let Some(sig) = env::builtin(&n.text) {
+                    // Legal in either phase: a builtin reads no state, which is
+                    // the whole reason it is not a predicate.
+                    self.call(&n.text, n.span, args, sig.params, &sig.ret)
                 } else if let Some(sig) = env::predicate(&n.text) {
-                    if args.len() != sig.params.len() {
-                        let msg = format!(
-                            "`{}` expects {} argument(s), got {}",
-                            n.text,
-                            sig.params.len(),
-                            args.len()
-                        );
-                        self.error(n.span, msg);
-                        // Arguments left unchecked on purpose: pairing them
-                        // against parameters at the wrong count reports about
-                        // ones that are merely in the wrong slot.
-                        return Type::Error;
+                    if self.phase == Phase::Static {
+                        return self.not_in_a_priority(&n.text, n.span);
                     }
-                    for (arg, want) in args.iter().zip(sig.params.iter()) {
-                        self.check_arg(arg, want);
-                    }
-                    sig.ret.clone()
+                    self.call(&n.text, n.span, args, sig.params, &sig.ret)
                 } else {
                     let msg = format!("unknown predicate `{}`", n.text);
                     self.error(n.span, msg);
@@ -388,11 +438,22 @@ impl<'a> RuleChecker<'a> {
 
     /// A bare name: a `let` binding, a zero-argument predicate, or a collection.
     fn ident(&mut self, name: &str, span: Span) -> Type {
-        if let Some((_, ty)) = self.scope.iter().find(|(n, _)| n == name) {
+        // No bindings exist in the static phase: a priority is checked before
+        // the rule's `let`s, precisely because it may not see them.
+        if self.phase == Phase::Tick
+            && let Some((_, ty)) = self.scope.iter().find(|(n, _)| n == name)
+        {
+            return ty.clone();
+        }
+
+        if let Some((_, ty)) = self.params.iter().find(|(n, _)| n == name) {
             return ty.clone();
         }
 
         if let Some(sig) = env::predicate(name) {
+            if self.phase == Phase::Static {
+                return self.not_in_a_priority(name, span);
+            }
             if sig.params.is_empty() {
                 return sig.ret.clone();
             }
@@ -425,6 +486,42 @@ impl<'a> RuleChecker<'a> {
                 .chain(self.scope.iter().map(|(n, _)| n.as_str())),
         );
         self.error(span, msg + &note);
+        Type::Error
+    }
+
+    /// Arity and arguments for anything with a fixed signature — a predicate or
+    /// a builtin. They differ in what they may read, not in how they are called.
+    fn call(
+        &mut self,
+        name: &str,
+        span: Span,
+        args: &[Expr],
+        want: &[ParamType],
+        ret: &Type,
+    ) -> Type {
+        if args.len() != want.len() {
+            let msg = format!(
+                "`{name}` expects {} argument(s), got {}",
+                want.len(),
+                args.len()
+            );
+            self.error(span, msg);
+            // Arguments left unchecked on purpose: pairing them against
+            // parameters at the wrong count reports about ones that are merely
+            // in the wrong slot.
+            return Type::Error;
+        }
+        for (arg, w) in args.iter().zip(want.iter()) {
+            self.check_arg(arg, w);
+        }
+        ret.clone()
+    }
+
+    /// Reading game state where only a doctrine is available.
+    fn not_in_a_priority(&mut self, name: &str, span: Span) -> Type {
+        let msg =
+            format!("a priority is fixed when the doctrine lands, so it cannot read `{name}`");
+        self.error(span, msg);
         Type::Error
     }
 
@@ -746,5 +843,126 @@ mod tests {
         assert!(pd.is_empty(), "{pd:?}");
         let diags = check(&ast).err().expect("a typo must stop lowering");
         assert!(diags.iter().all(|d| d.is_error()), "{diags:?}");
+    }
+
+    /// `messages` runs the whole of `check`, which lowers on success — so a
+    /// rule set that checks cleanly cannot be asserted on until `lower` handles
+    /// parameters. These pin the rejections; `a_parameterised_rule_set_checks`
+    /// is the positive case, ignored until then.
+    fn param_src(decls: &str, priority: &str, require: &str) -> String {
+        format!(
+            "{decls}rule r {{\n priority {priority}\n category economy\n do scout\n \
+             require {require}\n}}\n"
+        )
+    }
+
+    #[test]
+    fn a_priority_cannot_read_game_state() {
+        let e = messages(&param_src("", "cash", "cash >= 1"));
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(e[0].contains("cannot read `cash`"), "{e:?}");
+
+        // Nested just as much as bare, and through `count` too.
+        let e = messages(&param_src("", "400 + role-count(barracks)", "cash >= 1"));
+        assert!(e.iter().any(|m| m.contains("cannot read")), "{e:?}");
+        let e = messages(&param_src("", "count(powr)", "cash >= 1"));
+        assert!(e.iter().any(|m| m.contains("cannot read")), "{e:?}");
+    }
+
+    #[test]
+    fn a_priority_must_be_an_int() {
+        // `lerpf` is the trap: a builtin, so the phase rule lets it through, but
+        // the engine sorts on an integer.
+        let e = messages(&param_src(
+            "param aggression: float\n",
+            "lerpf(200.0, 400.0, aggression)",
+            "cash >= 1",
+        ));
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(e[0].contains("expected int"), "{e:?}");
+    }
+
+    #[test]
+    fn a_priority_cannot_see_a_binding() {
+        let src = "param aggression: float\n\
+                   rule r {\n priority n\n category economy\n do scout\n \
+                   let n = 400\n require cash >= 1\n}\n";
+        let e = messages(src);
+        assert!(e.iter().any(|m| m.contains("unknown name `n`")), "{e:?}");
+    }
+
+    /// The phase is restored after the priority, or every predicate in the rest
+    /// of the rule would be rejected too.
+    ///
+    /// Arithmetic rather than `lerp` on purpose: this has to check *and* lower,
+    /// and lowering a builtin is not written yet. `200 + 200` exercises the same
+    /// set-and-restore.
+    #[test]
+    fn the_static_phase_does_not_leak_into_the_rule() {
+        let e = messages(&param_src(
+            "",
+            "200 + 200",
+            "cash >= 1 and has-role(barracks)",
+        ));
+        assert!(e.is_empty(), "{e:?}");
+    }
+
+    #[test]
+    fn a_parameter_cannot_take_a_reserved_name() {
+        for (decl, want) in [
+            ("param cash: int\n", "is a predicate"),
+            ("param lerp: int\n", "is a builtin"),
+            ("param powr: int\n", "is a building"),
+        ] {
+            let e = messages(&param_src(decl, "1", "cash >= 1"));
+            assert!(e.iter().any(|m| m.contains(want)), "{decl}: {e:?}");
+        }
+    }
+
+    #[test]
+    fn a_parameter_cannot_be_declared_twice() {
+        let e = messages(&param_src(
+            "param aggression: float\nparam aggression: int\n",
+            "1",
+            "cash >= 1",
+        ));
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(e[0].contains("declared twice"), "{e:?}");
+    }
+
+    #[test]
+    fn a_binding_cannot_shadow_a_parameter() {
+        let src = "param aggression: float\n\
+                   rule r {\n priority 1\n category economy\n do scout\n \
+                   let aggression = 3\n require cash >= 1\n}\n";
+        let e = messages(src);
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(
+            e[0].contains("is a parameter and cannot be rebound"),
+            "{e:?}"
+        );
+    }
+
+    /// A parameter's declared type is load-bearing, not decoration.
+    ///
+    /// Asserted through a rejection because the accepting case would go on to
+    /// lower — `form-squad` wants an `Int` group size, and a float parameter is
+    /// exactly the mistake worth catching.
+    #[test]
+    fn a_parameter_carries_its_declared_type() {
+        let src = "param size: float\n\
+                   rule r {\n priority 1\n category squad-form\n \
+                   do form-squad(naval-attack, Naval, size, Attack)\n \
+                   require cash >= 1\n}\n";
+        let e = messages(src);
+        assert_eq!(e.len(), 1, "{e:?}");
+        assert!(e[0].contains("int"), "{e:?}");
+    }
+
+    #[test]
+    fn a_parameterised_rule_set_checks() {
+        let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/rules/params.vy"))
+            .expect("params.vy");
+        assert!(messages(&src).is_empty());
     }
 }

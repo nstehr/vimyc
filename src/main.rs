@@ -21,6 +21,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // redirected straight into a generated file.
     let emit_json = args.iter().any(|a| a == "--json");
     args.retain(|a| a != "--json");
+    // `--params doctrine.json`, a flat object of name to number.
+    let params_path = args
+        .iter()
+        .position(|a| a == "--params")
+        .map(|i| args.remove(i + 1));
+    args.retain(|a| a != "--params");
 
     let mut args = args.into_iter();
     let Some(path) = args.next() else {
@@ -58,16 +64,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
     report(&src, &checked.warnings);
 
-    // No way to supply a doctrine's numbers from the CLI yet. Refused rather
-    // than defaulted: a wrong threshold is worse than a missing one.
-    let params = vimyc::ir::ParamValues::default();
-    if !checked.ir.params.is_empty() {
-        return Err(format!(
-            "{} declares parameters, which this CLI cannot supply yet",
-            checked.ir.params.len()
-        )
-        .into());
-    }
+    let supplied = match &params_path {
+        Some(p) => {
+            let json = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?;
+            serde_json::from_str(&json).map_err(|e| format!("{p}: {e}"))?
+        }
+        None => std::collections::HashMap::new(),
+    };
+    let params = vimyc::ir::ParamValues::bind(&checked.ir, &supplied)?;
 
     if emit_json {
         let vimyc::emit::Artifact::Expr(rules) =

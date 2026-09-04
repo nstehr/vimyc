@@ -103,6 +103,17 @@ fn lower_expr(e: &Expr, scope: &[String], params: &[String]) -> IrExpr {
             if name.text == env::COUNT {
                 return lower_count(&args[0], e.span, scope, params);
             }
+            if let Some(sig) = env::builtin(&name.text) {
+                let args = args
+                    .iter()
+                    .zip(sig.params.iter())
+                    .map(|(a, want)| lower_arg(a, want, scope, params))
+                    .collect();
+                return IrExpr {
+                    kind: IrExprKind::Builtin(sig.id, args),
+                    span: e.span,
+                };
+            }
             let sig = env::predicate(&name.text)
                 .unwrap_or_else(|| unreachable!("unknown predicate `{}`", name.text));
             let args = args
@@ -202,8 +213,14 @@ fn lower_ident(name: &str, span: Span, scope: &[String], params: &[String]) -> I
             span,
         };
     }
-    if !params.is_empty() {
-        todo!("resolve `{name}` to a param slot before trying a predicate")
+    // After the rule scope, because `bind` rejects a binding that would shadow
+    // a parameter — so at most one of the two can match, and the order is only
+    // about matching what `check` did.
+    if let Some(slot) = params.iter().position(|n| n == name) {
+        return IrExpr {
+            kind: IrExprKind::Param(slot as u32),
+            span,
+        };
     }
     let sig = env::predicate(name).unwrap_or_else(|| unreachable!("unknown name `{name}`"));
     IrExpr {

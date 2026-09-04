@@ -9,7 +9,7 @@
 
 use crate::ast::{BinOp, UnOp};
 use crate::env::{self, Predicate};
-use crate::ir::{Ir, IrExpr, IrExprKind, IrRule, ParamValues};
+use crate::ir::{Ir, IrExpr, IrExprKind, IrRule, ParamValue, ParamValues};
 use crate::state::State;
 use std::cmp::Reverse;
 use std::collections::HashSet;
@@ -69,13 +69,59 @@ pub fn evaluate<'a>(ir: &'a Ir, params: &ParamValues, state: &State) -> Firing<'
 /// Separate from `rule_fires` because the phases are separate: this runs once
 /// when a doctrine lands, that runs every tick.
 pub fn priority(rule: &IrRule, params: &ParamValues) -> i64 {
-    if let IrExprKind::Int(n) = rule.priority.kind {
-        return n;
+    match static_eval(&rule.priority, params) {
+        Value::Int(n) => n,
+        other => unreachable!("priority is {other:?}, which `check` should have rejected"),
     }
-    todo!(
-        "evaluate the priority expression against {} params",
-        params.values.len()
-    )
+}
+
+/// Evaluates an expression that reads no state.
+///
+/// Takes no `State`, which is the phase separation made structural rather than
+/// promised: a priority physically cannot consult the game. The arms it does not
+/// handle are the ones `check` rejects in `Phase::Static`.
+pub(crate) fn static_eval(e: &IrExpr, params: &ParamValues) -> Value {
+    match &e.kind {
+        IrExprKind::Int(n) => Value::Int(*n),
+        IrExprKind::Float(f) => Value::Float(*f),
+        IrExprKind::Param(slot) => param_value(params, *slot),
+        IrExprKind::Builtin(id, args) => {
+            let args: Vec<Value> = args.iter().map(|a| static_eval(a, params)).collect();
+            apply_builtin(*id, &args)
+        }
+        IrExprKind::Unary(op, operand) => unary(*op, static_eval(operand, params)),
+        IrExprKind::Binary(op, l, r) => binary(*op, static_eval(l, params), static_eval(r, params)),
+        other => unreachable!("`{other:?}` reads state and cannot be static"),
+    }
+}
+
+/// One doctrine value, by slot.
+fn param_value(params: &ParamValues, slot: u32) -> Value {
+    match params.values.get(slot as usize) {
+        Some(ParamValue::Int(n)) => Value::Int(*n),
+        Some(ParamValue::Float(f)) => Value::Float(*f),
+        // A caller supplied fewer values than the rule set declares. Not a
+        // compiler bug, but nothing here can carry on without a number.
+        None => panic!("no value for parameter slot {slot}"),
+    }
+}
+
+/// `lerp` and `lerpf`, matching Go's `doctrine.go` exactly — including that
+/// `lerp` rounds rather than truncates.
+fn apply_builtin(id: env::Builtin, args: &[Value]) -> Value {
+    match (id, args) {
+        (env::Builtin::Lerp, [min, max, t]) => {
+            let (min, max) = (as_f64(*min), as_f64(*max));
+            // Saturating, like every other integer path here: a doctrine is not
+            // trusted to keep the arithmetic in range.
+            Value::Int((min + ((max - min) * as_f64(*t)).round()) as i64)
+        }
+        (env::Builtin::Lerpf, [min, max, t]) => {
+            let (min, max) = (as_f64(*min), as_f64(*max));
+            Value::Float(min + (max - min) * as_f64(*t))
+        }
+        _ => unreachable!("{id:?} with {} arguments", args.len()),
+    }
 }
 
 /// Whether every `require` holds.
@@ -136,24 +182,16 @@ impl<'a> Evaluator<'a> {
             IrExprKind::Int(n) => Value::Int(*n),
             IrExprKind::Float(f) => Value::Float(*f),
             IrExprKind::Binding(slot) => self.scope[*slot as usize],
-            IrExprKind::Param(slot) => todo!("read param slot {slot}"),
-            IrExprKind::Builtin(id, args) => todo!("apply {id:?} to {} args", args.len()),
+            IrExprKind::Param(slot) => param_value(self.params, *slot),
+            IrExprKind::Builtin(id, args) => {
+                let args: Vec<Value> = args.iter().map(|a| self.eval(a)).collect();
+                apply_builtin(*id, &args)
+            }
             IrExprKind::Predicate(id, args) => self.apply(*id, args),
             // Only ever an argument, read as a name by `key` and `arg_name`.
             IrExprKind::Member(..) => unreachable!("enum member in a value position"),
 
-            IrExprKind::Unary(op, operand) => match op {
-                UnOp::Not => Value::Bool(!expect_bool(self.eval(operand))),
-                UnOp::Neg => match self.eval(operand) {
-                    Value::Int(n) => Value::Int(-n),
-                    Value::Float(f) => Value::Float(-f),
-                    other => unreachable!("cannot negate {other:?}"),
-                },
-                UnOp::Exists => match self.eval(operand) {
-                    Value::Opt(present) => Value::Bool(present),
-                    other => unreachable!("`exists` on {other:?}"),
-                },
-            },
+            IrExprKind::Unary(op, operand) => unary(*op, self.eval(operand)),
 
             IrExprKind::Binary(op, left, right) => match op {
                 BinOp::And => {
@@ -162,50 +200,8 @@ impl<'a> Evaluator<'a> {
                 BinOp::Or => {
                     Value::Bool(expect_bool(self.eval(left)) || expect_bool(self.eval(right)))
                 }
-                _ => self.eval_binary(*op, self.eval(left), self.eval(right)),
+                _ => binary(*op, self.eval(left), self.eval(right)),
             },
-        }
-    }
-
-    fn eval_binary(&self, op: BinOp, l: Value, r: Value) -> Value {
-        if let (Value::Bool(a), Value::Bool(b)) = (l, r) {
-            return match op {
-                BinOp::Eq => Value::Bool(a == b),
-                BinOp::NotEq => Value::Bool(a != b),
-                other => unreachable!("{other:?} on bools"),
-            };
-        }
-
-        let (a, b) = (as_f64(l), as_f64(r));
-        match op {
-            BinOp::Eq => Value::Bool(a == b),
-            BinOp::NotEq => Value::Bool(a != b),
-            BinOp::Lt => Value::Bool(a < b),
-            BinOp::LtEq => Value::Bool(a <= b),
-            BinOp::Gt => Value::Bool(a > b),
-            BinOp::GtEq => Value::Bool(a >= b),
-            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
-                if let (Value::Int(x), Value::Int(y)) = (l, r) {
-                    Value::Int(match op {
-                        BinOp::Add => x.saturating_add(y),
-                        BinOp::Sub => x.saturating_sub(y),
-                        BinOp::Mul => x.saturating_mul(y),
-                        BinOp::Div => x.checked_div(y).unwrap_or(0),
-                        other => unreachable!("not arithmetic: {other:?}"),
-                    })
-                } else {
-                    Value::Float(match op {
-                        BinOp::Add => a + b,
-                        BinOp::Sub => a - b,
-                        BinOp::Mul => a * b,
-                        // Floats need no guard: division by zero is infinity,
-                        // not a trap.
-                        BinOp::Div => a / b,
-                        other => unreachable!("not arithmetic: {other:?}"),
-                    })
-                }
-            }
-            BinOp::And | BinOp::Or => unreachable!("handled by the caller"),
         }
     }
 
@@ -311,6 +307,68 @@ impl<'a> Evaluator<'a> {
 /// The literal name of an argument in an enum position.
 ///
 /// Panics on anything else, which the type checker has already ruled out.
+/// Arithmetic and comparison, shared by the two evaluators.
+///
+/// Free rather than a method because it never needed `self`, and the static
+/// evaluator has no `self` to give it.
+fn binary(op: BinOp, l: Value, r: Value) -> Value {
+    if let (Value::Bool(a), Value::Bool(b)) = (l, r) {
+        return match op {
+            BinOp::Eq => Value::Bool(a == b),
+            BinOp::NotEq => Value::Bool(a != b),
+            other => unreachable!("{other:?} on bools"),
+        };
+    }
+
+    let (a, b) = (as_f64(l), as_f64(r));
+    match op {
+        BinOp::Eq => Value::Bool(a == b),
+        BinOp::NotEq => Value::Bool(a != b),
+        BinOp::Lt => Value::Bool(a < b),
+        BinOp::LtEq => Value::Bool(a <= b),
+        BinOp::Gt => Value::Bool(a > b),
+        BinOp::GtEq => Value::Bool(a >= b),
+        BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
+            if let (Value::Int(x), Value::Int(y)) = (l, r) {
+                Value::Int(match op {
+                    BinOp::Add => x.saturating_add(y),
+                    BinOp::Sub => x.saturating_sub(y),
+                    BinOp::Mul => x.saturating_mul(y),
+                    BinOp::Div => x.checked_div(y).unwrap_or(0),
+                    other => unreachable!("not arithmetic: {other:?}"),
+                })
+            } else {
+                Value::Float(match op {
+                    BinOp::Add => a + b,
+                    BinOp::Sub => a - b,
+                    BinOp::Mul => a * b,
+                    // Floats need no guard: division by zero is infinity,
+                    // not a trap.
+                    BinOp::Div => a / b,
+                    other => unreachable!("not arithmetic: {other:?}"),
+                })
+            }
+        }
+        BinOp::And | BinOp::Or => unreachable!("handled by the caller"),
+    }
+}
+
+/// `not`, negation and `exists`.
+fn unary(op: UnOp, v: Value) -> Value {
+    match op {
+        UnOp::Not => Value::Bool(!expect_bool(v)),
+        UnOp::Neg => match v {
+            Value::Int(n) => Value::Int(-n),
+            Value::Float(f) => Value::Float(-f),
+            other => unreachable!("cannot negate {other:?}"),
+        },
+        UnOp::Exists => match v {
+            Value::Opt(present) => Value::Bool(present),
+            other => unreachable!("`exists` on {other:?}"),
+        },
+    }
+}
+
 /// The state key a call is recorded under. Arguments in enum positions are
 /// literal names; numeric ones are rendered so a float argument keys distinctly.
 fn key(name: &str, args: &[IrExpr]) -> String {

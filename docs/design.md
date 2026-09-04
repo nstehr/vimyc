@@ -364,6 +364,24 @@ Priorities are the one thing that must be folded per doctrine either way, since
 the engine sorts on them. Deferring this choice is most of the reason to put
 parameters in the language rather than to keep templating rule text in Go.
 
+### Folding leaves the gate behind
+
+A folded gate becomes a constant comparison rather than removing the rule:
+
+```
+require naval-weight >= 0.3     ->     0.4 >= 0.3 && MapHasWater() && ...
+```
+
+Go drops the rule entirely when the gate is false, so the emitted set does not
+yet match what `CompileDoctrine` produces — a false gate leaves a rule that never
+fires instead of no rule at all. Behaviour is the same and the cost is one
+comparison, but two things want it fixed: comparing against real rule sets is
+the acceptance test for this whole design, and `check_shadowed_rules` reasons
+about conjuncts that would then always hold.
+
+The fix is a fold-time pass that evaluates the static conjuncts, drops the rule
+if any is false and drops the conjunct if it is true. Not written yet.
+
 ### Not parameters
 
 Doctrine also carries `PreferredInfantry` and friends — `[]string` preferences

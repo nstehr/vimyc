@@ -581,3 +581,82 @@ fn emits_the_parentheses_precedence_needs() {
         assert_eq!(emit_one(src), want, "emitting `{src}`");
     }
 }
+
+/// A doctrine's numbers, through the whole pipeline.
+///
+/// `lerp` has to agree with Go's `doctrine.go` exactly — it rounds rather than
+/// truncating, and a priority off by one reorders a category.
+#[test]
+fn parameters_fold_through_to_expr() {
+    let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/rules/params.vy"))
+        .expect("params.vy");
+    let (tokens, ld) = vimyc::lexer::lex(&src);
+    assert!(ld.is_empty(), "{ld:?}");
+    let (ast, pd) = vimyc::parser::parse(&tokens);
+    assert!(pd.is_empty(), "{pd:?}");
+    let ir = vimyc::check::check(&ast).expect("params.vy checks").ir;
+
+    let doctrine = std::collections::HashMap::from([
+        ("aggression".to_string(), 0.7),
+        ("naval-weight".to_string(), 0.4),
+        ("ground-attack-group-size".to_string(), 8.0),
+    ]);
+    let params = vimyc::ir::ParamValues::bind(&ir, &doctrine).expect("binds");
+    let vimyc::emit::Artifact::Expr(rules) =
+        vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr);
+
+    // 200 + round((400 - 200) * 0.7) = 340, matching Go's lerp.
+    let form = rules.iter().find(|r| r.name == "form-naval-squad").unwrap();
+    assert_eq!(form.priority, 340);
+    assert_eq!(
+        rules
+            .iter()
+            .find(|r| r.name == "naval-attack-move")
+            .unwrap()
+            .priority,
+        330
+    );
+
+    // An int parameter reaches an action argument as an integer, not `8.0`.
+    assert_eq!(form.action, "form-squad(naval-attack, Naval, 8, Attack)");
+    assert!(
+        form.condition.contains("len(UnassignedIdleNaval()) >= 8"),
+        "{}",
+        form.condition
+    );
+
+    // A gate folds to a constant comparison rather than removing the rule —
+    // see the note in docs/design.md about dead conjuncts.
+    assert!(
+        form.condition.starts_with("0.4 >= 0.3"),
+        "{}",
+        form.condition
+    );
+}
+
+/// Rounding is where a hand-written `lerp` and Go's diverge, so it is pinned
+/// rather than left to the one value the sample doctrine happens to use.
+#[test]
+fn lerp_rounds_the_way_go_does() {
+    for (t, want) in [
+        (0.0, 200),
+        (1.0, 400),
+        (0.5, 300),
+        (0.333, 267),
+        (0.334, 267),
+    ] {
+        let src = "param t: float\nrule r {\n priority lerp(200, 400, t)\n \
+                   category economy\n do scout\n require cash >= 1\n}\n";
+        let (tokens, _) = vimyc::lexer::lex(src);
+        let (ast, _) = vimyc::parser::parse(&tokens);
+        let ir = vimyc::check::check(&ast).expect("checks").ir;
+        let params = vimyc::ir::ParamValues::bind(
+            &ir,
+            &std::collections::HashMap::from([("t".to_string(), t)]),
+        )
+        .expect("binds");
+        let vimyc::emit::Artifact::Expr(rules) =
+            vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr);
+        assert_eq!(rules[0].priority, want, "lerp(200, 400, {t})");
+    }
+}

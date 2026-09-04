@@ -27,7 +27,7 @@ fn emit_rule(rule: &IrRule, params: &ParamValues) -> RuleSource {
         }
         // Each `require` is a conjunct, so it sits at `&&`'s precedence and
         // parenthesises itself if it is looser.
-        emit_expr(require, rule, PREC_AND, &mut condition);
+        emit_expr(require, rule, params, PREC_AND, &mut condition);
     }
 
     RuleSource {
@@ -35,14 +35,26 @@ fn emit_rule(rule: &IrRule, params: &ParamValues) -> RuleSource {
         priority: crate::eval::priority(rule, params),
         category: env::category_name(rule.category.0).to_string(),
         exclusive: rule.exclusive,
-        action: emit_action(rule),
+        action: emit_action(rule, params),
         condition,
+    }
+}
+
+/// A parameter or builtin, resolved to the number the doctrine gives it.
+///
+/// Reuses the priority evaluator, so a folded threshold and a folded priority
+/// cannot disagree about what `lerp` means.
+fn fold(e: &IrExpr, params: &ParamValues) -> String {
+    match crate::eval::static_eval(e, params) {
+        crate::eval::Value::Int(n) => n.to_string(),
+        crate::eval::Value::Float(f) => crate::state::render_number(f),
+        other => unreachable!("folded to {other:?}, which is not a number"),
     }
 }
 
 /// The action as Go's `actionSrc` spells it: the language's own form, since Go
 /// looks this up rather than evaluating it.
-fn emit_action(rule: &IrRule) -> String {
+fn emit_action(rule: &IrRule, params: &ParamValues) -> String {
     let name = env::action_name(rule.action.id.0);
     if rule.action.args.is_empty() {
         return name.to_string();
@@ -53,7 +65,7 @@ fn emit_action(rule: &IrRule) -> String {
         .iter()
         .map(|a| {
             let mut s = String::new();
-            emit_bare(a, rule, &mut s);
+            emit_bare(a, rule, params, &mut s);
             s
         })
         .collect();
@@ -61,7 +73,7 @@ fn emit_action(rule: &IrRule) -> String {
 }
 
 /// An action argument, in the language's spelling rather than Go's.
-fn emit_bare(e: &IrExpr, rule: &IrRule, out: &mut String) {
+fn emit_bare(e: &IrExpr, rule: &IrRule, params: &ParamValues, out: &mut String) {
     match &e.kind {
         IrExprKind::Int(n) => out.push_str(&n.to_string()),
         IrExprKind::Float(f) => out.push_str(&crate::state::render_number(*f)),
@@ -69,10 +81,9 @@ fn emit_bare(e: &IrExpr, rule: &IrRule, out: &mut String) {
         // Folded to the number the doctrine supplied. The other binding time —
         // the engine answering `Aggression()` at evaluation time — would emit a
         // call here instead; `docs/design.md` covers why that stays open.
-        IrExprKind::Param(slot) => todo!("fold param slot {slot}"),
-        IrExprKind::Builtin(id, args) => todo!("fold {id:?} over {} args", args.len()),
+        IrExprKind::Param(_) | IrExprKind::Builtin(..) => out.push_str(&fold(e, params)),
         IrExprKind::Member(domain, index) => out.push_str(env::member_name(*domain, *index)),
-        IrExprKind::Binding(slot) => emit_bare(&rule.lets[*slot as usize], rule, out),
+        IrExprKind::Binding(slot) => emit_bare(&rule.lets[*slot as usize], rule, params, out),
         other => unreachable!("action argument is not a literal: {other:?}"),
     }
 }
@@ -118,7 +129,7 @@ fn operator(op: BinOp) -> &'static str {
 ///
 /// Parenthesised by precedence rather than everywhere: this output is read by
 /// people debugging a rule set, and `Cash() >= 300` beats `((Cash()) >= (300))`.
-fn emit_expr(e: &IrExpr, rule: &IrRule, parent: u8, out: &mut String) {
+fn emit_expr(e: &IrExpr, rule: &IrRule, params: &ParamValues, parent: u8, out: &mut String) {
     match &e.kind {
         IrExprKind::Int(n) => out.push_str(&n.to_string()),
         IrExprKind::Float(f) => out.push_str(&crate::state::render_number(*f)),
@@ -126,8 +137,7 @@ fn emit_expr(e: &IrExpr, rule: &IrRule, parent: u8, out: &mut String) {
         // Folded to the number the doctrine supplied. The other binding time —
         // the engine answering `Aggression()` at evaluation time — would emit a
         // call here instead; `docs/design.md` covers why that stays open.
-        IrExprKind::Param(slot) => todo!("fold param slot {slot}"),
-        IrExprKind::Builtin(id, args) => todo!("fold {id:?} over {} args", args.len()),
+        IrExprKind::Param(_) | IrExprKind::Builtin(..) => out.push_str(&fold(e, params)),
 
         // Enum literals are quoted strings on Go's side, in Go's spelling.
         IrExprKind::Member(domain, index) => {
@@ -136,7 +146,7 @@ fn emit_expr(e: &IrExpr, rule: &IrRule, parent: u8, out: &mut String) {
             out.push('"');
         }
 
-        IrExprKind::Binding(slot) => emit_binding(rule, *slot, parent, out),
+        IrExprKind::Binding(slot) => emit_binding(rule, params, *slot, parent, out),
 
         IrExprKind::Predicate(id, args) => {
             let sig = env::PREDICATES
@@ -155,7 +165,7 @@ fn emit_expr(e: &IrExpr, rule: &IrRule, parent: u8, out: &mut String) {
                 if i > 0 {
                     out.push(',');
                 }
-                emit_expr(a, rule, PREC_ATOM, out);
+                emit_expr(a, rule, params, PREC_ATOM, out);
             }
             out.push(')');
             if collection {
@@ -170,7 +180,7 @@ fn emit_expr(e: &IrExpr, rule: &IrRule, parent: u8, out: &mut String) {
                 if wrap {
                     out.push('(');
                 }
-                emit_expr(operand, rule, PREC_ATOM, out);
+                emit_expr(operand, rule, params, PREC_ATOM, out);
                 out.push_str(" != nil");
                 if wrap {
                     out.push(')');
@@ -178,7 +188,7 @@ fn emit_expr(e: &IrExpr, rule: &IrRule, parent: u8, out: &mut String) {
             }
             UnOp::Not | UnOp::Neg => {
                 out.push(if matches!(op, UnOp::Not) { '!' } else { '-' });
-                emit_expr(operand, rule, PREC_UNARY, out);
+                emit_expr(operand, rule, params, PREC_UNARY, out);
             }
         },
 
@@ -188,13 +198,13 @@ fn emit_expr(e: &IrExpr, rule: &IrRule, parent: u8, out: &mut String) {
             if wrap {
                 out.push('(');
             }
-            emit_expr(l, rule, prec, out);
+            emit_expr(l, rule, params, prec, out);
             out.push(' ');
             out.push_str(operator(*op));
             out.push(' ');
             // The right operand binds one tighter, so `a - (b - c)` keeps its
             // parentheses while `(a - b) - c` loses them.
-            emit_expr(r, rule, prec + 1, out);
+            emit_expr(r, rule, params, prec + 1, out);
             if wrap {
                 out.push(')');
             }
@@ -207,8 +217,8 @@ fn emit_expr(e: &IrExpr, rule: &IrRule, parent: u8, out: &mut String) {
 /// Terminates because bindings are rule-scoped and may only refer to earlier
 /// ones. A binding used twice is emitted twice, which is why `let` is worth
 /// keeping in the source even though it vanishes here.
-fn emit_binding(rule: &IrRule, slot: u32, parent: u8, out: &mut String) {
-    emit_expr(&rule.lets[slot as usize], rule, parent, out);
+fn emit_binding(rule: &IrRule, params: &ParamValues, slot: u32, parent: u8, out: &mut String) {
+    emit_expr(&rule.lets[slot as usize], rule, params, parent, out);
 }
 
 /// Predicates whose Go spelling capitalises an acronym, which no rule can
