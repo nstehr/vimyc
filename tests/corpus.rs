@@ -494,7 +494,10 @@ fn real_rule_sets_lower() {
 fn emitted_expr_round_trips_to_go() {
     let ir = lower_checked(&parse_seed());
     let vimyc::emit::Artifact::Expr(emitted) =
-        vimyc::emit::emit(&ir, &NO_PARAMS, vimyc::emit::Target::Expr);
+        vimyc::emit::emit(&ir, &NO_PARAMS, vimyc::emit::Target::Expr)
+    else {
+        unreachable!()
+    };
 
     let expected = seed();
     let squeeze = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -544,7 +547,10 @@ fn emit_one(requires: &str) -> String {
         Err(diags) => panic!("{requires}: {diags:?}"),
     };
     let vimyc::emit::Artifact::Expr(rules) =
-        vimyc::emit::emit(&ir, &NO_PARAMS, vimyc::emit::Target::Expr);
+        vimyc::emit::emit(&ir, &NO_PARAMS, vimyc::emit::Target::Expr)
+    else {
+        unreachable!()
+    };
     rules[0].condition.clone()
 }
 
@@ -614,7 +620,10 @@ fn parameters_fold_through_to_expr() {
     let params = vimyc::ir::ParamValues::bind(&ir, &doctrine).expect("binds");
     vimyc::specialise::specialise(&mut ir, &params);
     let vimyc::emit::Artifact::Expr(rules) =
-        vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr);
+        vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr)
+    else {
+        unreachable!()
+    };
 
     // 200 + round((400 - 200) * 0.7) = 340, matching Go's lerp.
     let form = rules.iter().find(|r| r.name == "form-naval-squad").unwrap();
@@ -654,7 +663,10 @@ fn parameters_fold_through_to_expr() {
     let params = vimyc::ir::ParamValues::bind(&ir, &land).expect("binds");
     vimyc::specialise::specialise(&mut ir, &params);
     let vimyc::emit::Artifact::Expr(rules) =
-        vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr);
+        vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr)
+    else {
+        unreachable!()
+    };
     assert!(rules.is_empty(), "{rules:?}");
 }
 
@@ -680,7 +692,10 @@ fn lerp_rounds_the_way_go_does() {
         )
         .expect("binds");
         let vimyc::emit::Artifact::Expr(rules) =
-            vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr);
+            vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr)
+        else {
+            unreachable!()
+        };
         assert_eq!(rules[0].priority, want, "lerp(200, 400, {t})");
     }
 }
@@ -705,7 +720,10 @@ fn the_arithmetic_builtins_match_go() {
         let params = vimyc::ir::ParamValues::bind(&ir, &map).expect("binds");
         vimyc::specialise::specialise(&mut ir, &params);
         let vimyc::emit::Artifact::Expr(rules) =
-            vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr);
+            vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr)
+        else {
+            unreachable!()
+        };
         rules[0].condition.clone()
     };
 

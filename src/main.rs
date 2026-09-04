@@ -16,11 +16,12 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    const USAGE: &str = "usage: vimyc <file> [state.json] [--json] [--params <file>|-]";
+    const USAGE: &str = "usage: vimyc <file> [state.json] [--json|--vy] [--params <file>|-]";
 
     // Explicit rather than scanning: `--params` with nothing after it used to
     // index past the end, and stray positional arguments vanished silently.
     let mut emit_json = false;
+    let mut emit_vy = false;
     let mut params_path: Option<String> = None;
     let mut positional: Vec<String> = Vec::new();
     let mut args = env::args().skip(1);
@@ -29,6 +30,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             // stdout carries the artifact and nothing else, so it can be
             // redirected straight into a generated file.
             "--json" => emit_json = true,
+            // The rule set as it stands after the doctrine, for reading.
+            "--vy" => emit_vy = true,
             // A flat object of parameter name to number.
             "--params" => {
                 params_path = Some(
@@ -106,10 +109,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // is not a number until now.
     report(&src, &vimyc::specialise::validate(&checked.ir, &params));
 
+    if emit_vy {
+        println!("{}", vimyc::emit::vy::emit_file(&checked.ir, &params));
+        return Ok(());
+    }
+
     if emit_json {
-        let vimyc::emit::Artifact::Expr(rules) =
-            vimyc::emit::emit(&checked.ir, &params, vimyc::emit::Target::Expr);
-        println!("{}", serde_json::to_string_pretty(&rules)?);
+        match vimyc::emit::emit(&checked.ir, &params, vimyc::emit::Target::Expr) {
+            vimyc::emit::Artifact::Expr(rules) => {
+                println!("{}", serde_json::to_string_pretty(&rules)?);
+            }
+            other => unreachable!("asked for expr, got {other:?}"),
+        }
         return Ok(());
     }
 

@@ -149,7 +149,10 @@ fn block_matches_go(file: &str) {
             .unwrap_or_else(|e| panic!("doctrine {i}: {e}"));
         vimyc::specialise::specialise(&mut ir, &params);
         let vimyc::emit::Artifact::Expr(mine) =
-            vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr);
+            vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr)
+        else {
+            unreachable!()
+        };
 
         let theirs: HashMap<&str, &GoRule> = case
             .rules
@@ -314,4 +317,84 @@ fn the_blocks_cover_every_rule_go_emits() {
         ported.len(),
         unreachable.len()
     );
+}
+
+/// The printed `.vy` is the rule set it claims to be.
+///
+/// Nothing executes it — Go runs the expr beside it — so a rendering bug would
+/// otherwise be invisible on a dashboard nobody could check. Round-tripping
+/// makes "what you read is what runs" a property: print the IR, parse it back,
+/// lower it, and require the same rules with the same conditions.
+///
+/// Run against every archived doctrine, so it covers the shapes real play
+/// produces rather than the ones a fixture would.
+#[test]
+fn emitted_vy_round_trips() {
+    let Some(cases) = corpus() else {
+        eprintln!("no acceptance corpus; skipping");
+        return;
+    };
+
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/rules/doctrine.vy");
+    let src = std::fs::read_to_string(path).expect("doctrine.vy");
+    let (tokens, _) = vimyc::lexer::lex(&src);
+    let (ast, _) = vimyc::parser::parse(&tokens);
+
+    let mut checked = 0usize;
+    for (i, case) in cases.iter().enumerate().step_by(17) {
+        let mut ir = vimyc::check::check(&ast).expect("checks").ir;
+        let params = vimyc::ir::ParamValues::bind(&ir, &case.params).expect("binds");
+        vimyc::specialise::specialise(&mut ir, &params);
+
+        // The expr each rule compiles to, before the round trip.
+        let vimyc::emit::Artifact::Expr(before) =
+            vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr)
+        else {
+            unreachable!()
+        };
+
+        // Print, and read it back as a fresh rule set. It has no parameters
+        // left — specialising folded them — so it binds against nothing.
+        let printed = vimyc::emit::vy::emit_file(&ir, &params);
+        let (tokens, lex_diags) = vimyc::lexer::lex(&printed);
+        assert!(
+            lex_diags.is_empty(),
+            "doctrine {i} does not lex:\n{printed}"
+        );
+        let (reparsed, parse_diags) = vimyc::parser::parse(&tokens);
+        assert!(
+            parse_diags.is_empty(),
+            "doctrine {i} does not parse: {parse_diags:?}\n{printed}"
+        );
+        let round = vimyc::check::check(&reparsed)
+            .unwrap_or_else(|d| panic!("doctrine {i} does not check: {d:?}\n{printed}"))
+            .ir;
+
+        let vimyc::emit::Artifact::Expr(after) = vimyc::emit::emit(
+            &round,
+            &vimyc::ir::ParamValues::default(),
+            vimyc::emit::Target::Expr,
+        ) else {
+            unreachable!()
+        };
+
+        assert_eq!(before.len(), after.len(), "doctrine {i}: rule count");
+        for (b, a) in before.iter().zip(&after) {
+            assert_eq!(b.name, a.name, "doctrine {i}");
+            assert_eq!(b.priority, a.priority, "doctrine {i}: {}", b.name);
+            assert_eq!(b.category, a.category, "doctrine {i}: {}", b.name);
+            assert_eq!(b.exclusive, a.exclusive, "doctrine {i}: {}", b.name);
+            assert_eq!(b.action, a.action, "doctrine {i}: {}", b.name);
+            assert_eq!(b.because, a.because, "doctrine {i}: {}", b.name);
+            // Exact, not `normalise`: that strips parentheses, which is right
+            // against Go and wrong here. Both sides are this emitter, so a
+            // printer that loses a parenthesis must fail rather than pass on a
+            // comparison that cannot see it.
+            assert_eq!(b.condition, a.condition, "doctrine {i}: {}", b.name);
+            checked += 1;
+        }
+    }
+
+    assert!(checked > 1000, "only {checked} rules round tripped");
+    eprintln!("{checked} rules survive printing and reading back");
 }

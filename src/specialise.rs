@@ -281,7 +281,10 @@ mod tests {
         assert!(gate_only.requires.is_empty());
 
         let emit::Artifact::Expr(rules) =
-            emit::emit(&ir, &ParamValues::default(), emit::Target::Expr);
+            emit::emit(&ir, &ParamValues::default(), emit::Target::Expr)
+        else {
+            unreachable!()
+        };
         let emitted = rules.iter().find(|r| r.name == "gate-only").unwrap();
         assert_eq!(emitted.condition, "true");
     }
@@ -359,7 +362,10 @@ mod tests {
         let (ast, _) = parser::parse(&tokens);
         let ir = check::check(&ast).expect("checks").ir;
         let emit::Artifact::Expr(rules) =
-            emit::emit(&ir, &ParamValues::default(), emit::Target::Expr);
+            emit::emit(&ir, &ParamValues::default(), emit::Target::Expr)
+        else {
+            unreachable!()
+        };
         assert_eq!(rules[0].action, "retreat-damaged-units(0.5)");
     }
 
@@ -393,7 +399,9 @@ mod tests {
             )
             .expect("binds");
             specialise(&mut ir, &params);
-            let emit::Artifact::Expr(rules) = emit::emit(&ir, &params, emit::Target::Expr);
+            let emit::Artifact::Expr(rules) = emit::emit(&ir, &params, emit::Target::Expr) else {
+                unreachable!()
+            };
             assert_eq!(rules[0].condition, want, "floor {floor}");
         }
     }

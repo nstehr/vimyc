@@ -572,3 +572,25 @@ Two have since landed. Actions with arguments arrived with the seed port.
 Doctrine parameters are specified above; the rule-level guard they were paired
 with turned out to be unnecessary — a guard is a `require` over a parameter, and
 giving it its own syntax would have made two spellings of one idea.
+
+## Printing the rule set back
+
+`emit::vy` prints the IR *after* lowering and specialising: numbers folded, gates
+the doctrine settled removed, `count(powr)` resolved to `building-count(powr)`.
+It is the `cargo expand` of this compiler rather than a formatter — what the
+source became, for the doctrine that ran.
+
+That is what the dashboard shows. It used to show expr, so reading a rule meant
+translating back into the language it was written in; now the thing you read is
+the thing you would edit.
+
+Both renderings come out of one `Ir` in one pass and travel in the same artifact,
+so they cannot drift. And because nothing executes the printed `.vy`, a rendering
+bug would otherwise be invisible — `emitted_vy_round_trips` prints, parses,
+lowers and requires the same rules with the same conditions, compared exactly
+rather than through the paren-insensitive normalisation used against Go. Dropping
+one parenthesis fails it.
+
+A formatter for hand-written sources is a different job: it would have to print
+the AST, since lowering rewrites `count(powr)` and folds away the parameters
+someone typed. `fmt.rs` is still the stub for that.

@@ -203,7 +203,10 @@ fn emitted_expr_round_trips_on_a_real_game() {
     for (i, src) in c.rule_sets.iter().enumerate() {
         let lowered = ir(src, i);
         let vimyc::emit::Artifact::Expr(emitted) =
-            vimyc::emit::emit(&lowered, &NO_PARAMS, vimyc::emit::Target::Expr);
+            vimyc::emit::emit(&lowered, &NO_PARAMS, vimyc::emit::Target::Expr)
+        else {
+            unreachable!()
+        };
 
         for rule in &emitted {
             let Some(want) = c.conditions[i].get(&rule.name) else {

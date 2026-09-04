@@ -19,7 +19,7 @@ source ──lexer──> tokens ──parser──> ast ──check──> ir �
 | `ir` | names resolved to ids, bindings to slots |
 | `lower` | `Ast → Ir`, crate-private |
 | `eval` | tree-walking interpreter over the IR |
-| `emit` | backends; `expr` is the first |
+| `emit` | backends: `expr` to run, `vy` to read |
 | `fmt` | canonical formatting |
 
 All hand-written on purpose. The one dependency worth reaching for eventually is

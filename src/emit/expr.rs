@@ -42,6 +42,9 @@ fn emit_rule(rule: &IrRule, params: &ParamValues) -> RuleSource {
         because: rule.because.clone(),
         action: emit_action(rule, params),
         condition,
+        // Emitted here rather than by a second pass, so the text Go shows and
+        // the text Go runs come from one `Ir` and cannot disagree.
+        source: super::vy::rule_source(rule, params),
     }
 }
 
