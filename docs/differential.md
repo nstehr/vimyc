@@ -187,3 +187,33 @@ threshold variants no live rule set uses.
 
 **Inlining repeated data.** Storing a full state on every one of its 13 cases
 made a corpus 21MB. Referencing states by index made it 1.9MB.
+
+## serde_json parsed a doctrine one ULP off
+
+Found by the boundary doctrines, and not by finding a porting mistake.
+
+Go sent `infantry_weight` as `0.39999999999999997`. vimyc read `0.4`. The
+difference is one unit in the last place and nothing would have noticed, except
+that the compiler computes `vehicle_weight - infantry_weight` and multiplies by
+800 — so `0.2` became `0.19999999999999996`, `trunc` gave 159 instead of 160,
+and a cash reserve came out a credit low in seven rules.
+
+`serde_json`'s default float parser is fast rather than correctly rounded. The
+`float_roundtrip` feature fixes it. Worth knowing for any number that crosses
+between the two languages, which by now is all of them.
+
+The real doctrines could not have found this. Their values are what an LLM
+emits, and those are round decimals that survive any parser. It took a corpus
+built to straddle thresholds, where a weight is a difference of two others.
+
+## The archived doctrines miss their own thresholds
+
+Not one of the 500 has an `Aggression` between 0.3 and 0.4, so the reserve gated
+on `Aggression < DoctrineSignificant` never changes sides across the whole
+corpus. Moving that threshold to 0.4 in the ported rules changed nothing and the
+acceptance test stayed green.
+
+LLM output clusters. A corpus of it covers what the model says, not what the
+compiler decides. `boundaryDoctrines` sweeps every weight across all six
+thresholds and staggers two of them so the differences the compiler takes are
+non-zero; the same mutation now moves 20 rules.

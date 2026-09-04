@@ -53,6 +53,11 @@ fn the_buildings_block_matches_go() {
     block_matches_go("buildings.vy");
 }
 
+#[test]
+fn the_production_block_matches_go() {
+    block_matches_go("production.vy");
+}
+
 fn block_matches_go(file: &str) {
     let Some(cases) = corpus() else {
         eprintln!("no acceptance corpus; run TestDumpAcceptanceCorpus");

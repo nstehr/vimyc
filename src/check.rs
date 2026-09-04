@@ -154,21 +154,31 @@ impl Checker {
                 continue;
             }
 
-            // The def's own parameters are its scope, and nothing else local is.
-            let mut checker = RuleChecker {
-                diags: &mut self.diags,
-                scope: Vec::new(),
-                params: &self.params,
-                defs: &self.defs,
-                phase: Phase::Tick,
-            };
+            // A def's parameters sit with the doctrine's rather than in the
+            // rule scope. They are substituted before anything evaluates, so
+            // they are as static as the arguments passed to them — and an
+            // argument is checked in the static phase, which does not consult
+            // the scope at all.
+            let mut visible = self.params.clone();
             for p in &d.params {
                 let ty = match p.kind {
                     ParamKind::Int => Type::Int,
                     ParamKind::Float => Type::Float,
                 };
-                checker.bind(&p.name, ty);
+                if let Some(why) = reserved(&p.name.text) {
+                    let msg = format!("{why} and cannot be a def parameter");
+                    self.diags.push(Diagnostic::error(p.name.span, msg));
+                }
+                visible.push((p.name.text.clone(), ty));
             }
+
+            let mut checker = RuleChecker {
+                diags: &mut self.diags,
+                scope: Vec::new(),
+                params: &visible,
+                defs: &self.defs,
+                phase: Phase::Tick,
+            };
             let ret = checker.synth(&d.body);
 
             self.defs.push(DefSig {

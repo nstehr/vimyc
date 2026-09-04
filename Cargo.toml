@@ -11,4 +11,7 @@ edition = "2024"
 # is about.
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# `float_roundtrip`: without it serde_json's fast float parser can land one ULP
+# off, so a doctrine value would not survive the trip from Go. That shifted a
+# reserve threshold by a credit — see docs/differential.md.
+serde_json = { version = "1", features = ["float_roundtrip"] }
