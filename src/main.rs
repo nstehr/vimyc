@@ -52,10 +52,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         let json =
             std::fs::read_to_string(&state_path).map_err(|e| format!("{state_path}: {e}"))?;
         let state: State = serde_json::from_str(&json).map_err(|e| format!("{state_path}: {e}"))?;
-        for rule in evaluate(&ast, &state).fired {
+        // Lowering only runs once the rule set has checked, so the errors above
+        // are all reported before anything here can panic.
+        let ir = vimyc::lower::lower(&ast);
+        for rule in evaluate(&ir, &state).fired {
             println!(
                 "{:>5}  {:<20} {}",
-                rule.priority, rule.category.text, rule.name.text
+                rule.priority,
+                vimyc::env::category_name(rule.category.0),
+                rule.name
             );
         }
     }

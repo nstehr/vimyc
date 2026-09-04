@@ -206,13 +206,11 @@ milestone cheap.
 
 ## The IR
 
-Planned, not yet built.
-
-Name resolution currently happens three times. `check` resolves `cash` to
+Name resolution used to happen three times. `check` resolves `cash` to
 `Predicate::Cash`, decides which of three things `count(x)` means, and finds
-which domain `powr` belongs to — then returns only `Vec<Diagnostic>` and throws
-all of it away. `eval` resolves again at runtime, calling `env::predicate(name)`
-per call, a linear scan of 64 signatures. An emitter would resolve a third time.
+which domain `powr` belongs to — then returned only `Vec<Diagnostic>` and threw
+all of it away. `eval` resolved again at runtime, calling `env::predicate(name)`
+per call, a linear scan of 64 signatures. An emitter would have been a third.
 
 A lowered IR resolves once, and it is what makes a second backend cheap:
 
@@ -290,19 +288,25 @@ to build. A trait with an associated `Output` would abstract the wrong thing
 anyway; the emitters share almost no interface, and what they actually share is
 the resolution work the IR now does once.
 
-### Sequence, and why the risk is low
+### Sequence, and why the risk was low
 
 1. `ir.rs` — types only
 2. `lower.rs` — `Ast → Ir`, reusing the checker's resolution
-3. Port `eval` to consume `Ir`. **The differential is the gate**: if lowering
-   changes behaviour at all, 16,317 real evaluations say so
-4. `emit/expr.rs` — `Ir → Vec<String>`
+3. Port `eval` to consume `Ir`. **The differential was the gate**: if lowering
+   changed behaviour at all, 16,317 real evaluations would say so
+4. `emit/expr.rs` — `Ir → Vec<RuleSource>`
 5. Verify the emitter against Go
 
-Step 5 has an acceptance test already available. Take the rule sets from a
-recorded game, translate to `.vy`, lower, emit expr, then run *that* expr through
-Go's engine against the same states and diff against the recorded results. A full
-round trip — Go to vimyc and back — checked against real play.
+All five are done. Step 3 cost `eval` three helpers rather than adding any:
+`eval_call`, `lookup` and `count` all resolved names that lowering had already
+resolved, and the scope became a `Vec<Value>` indexed by slot instead of an
+association list searched by name. The differential passed unchanged.
+
+Step 5 landed as a stronger check than the one planned here. Rather than running
+the emitted expr back through Go, the corpus now carries the conditions Go
+compiled, and the test compares emitted source against them directly — which
+reaches the rules the recorded states never make true, and in a real game that is
+most of them. 3810 conditions across 49 rule sets.
 
 Steps 1 to 3 carry no risk that cannot be detected. Step 4 is small. Step 5 is
 where an unfaithful emitter would show up.

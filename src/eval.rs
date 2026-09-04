@@ -1,16 +1,16 @@
-//! Tree-walking interpreter.
+//! Tree-walking interpreter over `Ir`.
 //!
 //! Also the oracle for any later backend: two implementations that must agree on
 //! the whole corpus is a better property test than reading bytecode.
 //!
-//! Assumes the rule set type checked. A `Value` of the wrong shape here is a
-//! compiler bug rather than bad input, so this reports nothing and panics on
-//! nothing — see `expect_bool`.
+//! Runs on lowered rules, so there are no names left to resolve and no `count`
+//! to disambiguate — every remaining failure would be a compiler bug rather than
+//! bad input, which is why nothing here reports a diagnostic.
 
-use crate::ast::{Ast, BinOp, Expr, ExprKind, Rule, UnOp};
+use crate::ast::{BinOp, UnOp};
 use crate::env::{self, Predicate};
+use crate::ir::{Ir, IrExpr, IrExprKind, IrRule};
 use crate::state::State;
-use crate::types::Domain;
 use std::cmp::Reverse;
 use std::collections::HashSet;
 
@@ -27,7 +27,7 @@ pub enum Value {
 /// Which rules fired, in the order they fired.
 #[derive(Debug, Default)]
 pub struct Firing<'a> {
-    pub fired: Vec<&'a Rule>,
+    pub fired: Vec<&'a IrRule>,
 }
 
 /// Runs a rule set against one state.
@@ -37,15 +37,15 @@ pub struct Firing<'a> {
 /// **skipped without being evaluated**. Evaluating it anyway would give the same
 /// firings but a different count of predicate calls, which the differential test
 /// would notice.
-pub fn evaluate<'a>(ast: &'a Ast, state: &State) -> Firing<'a> {
-    let mut order: Vec<&Rule> = ast.rules.iter().collect();
+pub fn evaluate<'a>(ir: &'a Ir, state: &State) -> Firing<'a> {
+    let mut order: Vec<&IrRule> = ir.rules.iter().collect();
     order.sort_by_key(|r| Reverse(r.priority));
 
-    let mut fired_categories: HashSet<&str> = HashSet::new();
+    let mut fired_categories: HashSet<u32> = HashSet::new();
     let mut firing = Firing::default();
 
     for rule in order {
-        if fired_categories.contains(rule.category.text.as_str()) {
+        if fired_categories.contains(&rule.category.0) {
             continue;
         }
         if !rule_fires(rule, state) {
@@ -53,7 +53,7 @@ pub fn evaluate<'a>(ast: &'a Ast, state: &State) -> Firing<'a> {
         }
         firing.fired.push(rule);
         if rule.exclusive {
-            fired_categories.insert(rule.category.text.as_str());
+            fired_categories.insert(rule.category.0);
         }
     }
 
@@ -61,15 +61,8 @@ pub fn evaluate<'a>(ast: &'a Ast, state: &State) -> Firing<'a> {
 }
 
 /// Whether every `require` holds.
-pub fn rule_fires(rule: &Rule, state: &State) -> bool {
-    let mut ev = Evaluator {
-        state,
-        scope: Vec::new(),
-    };
-    for binding in &rule.lets {
-        let value = ev.eval(&binding.value);
-        ev.scope.push((binding.name.text.clone(), value));
-    }
+pub fn rule_fires(rule: &IrRule, state: &State) -> bool {
+    let ev = Evaluator::for_rule(rule, state);
     for require in &rule.requires {
         if !expect_bool(ev.eval(require)) {
             return false;
@@ -83,15 +76,8 @@ pub fn rule_fires(rule: &Rule, state: &State) -> bool {
 /// Deliberately does **not** short-circuit, unlike `rule_fires`: this exists to
 /// measure which conjuncts a corpus actually exercises, and a conjunct never
 /// reached tells you nothing about whether it works.
-pub fn conjuncts(rule: &Rule, state: &State) -> Vec<bool> {
-    let mut ev = Evaluator {
-        state,
-        scope: Vec::new(),
-    };
-    for binding in &rule.lets {
-        let value = ev.eval(&binding.value);
-        ev.scope.push((binding.name.text.clone(), value));
-    }
+pub fn conjuncts(rule: &IrRule, state: &State) -> Vec<bool> {
+    let ev = Evaluator::for_rule(rule, state);
     rule.requires
         .iter()
         .map(|r| expect_bool(ev.eval(r)))
@@ -104,20 +90,36 @@ pub fn conjuncts(rule: &Rule, state: &State) -> Vec<bool> {
 /// binding cannot leak into the next one.
 struct Evaluator<'a> {
     state: &'a State,
-    /// `let` bindings. `&self` on `eval` is deliberate — evaluation has no
-    /// effects, and only binding mutates.
-    scope: Vec<(String, Value)>,
+    /// `let` bindings by slot. Lowering numbered them, so nothing here searches
+    /// by name — and a binding can only refer to an earlier one, which is why
+    /// filling this in order is enough.
+    scope: Vec<Value>,
 }
 
-impl Evaluator<'_> {
-    fn eval(&self, e: &Expr) -> Value {
-        match &e.kind {
-            ExprKind::Int(n) => Value::Int(*n),
-            ExprKind::Float(f) => Value::Float(*f),
-            ExprKind::Ident(name) => self.lookup(&name.text),
-            ExprKind::Call(name, args) => self.eval_call(&name.text, args),
+impl<'a> Evaluator<'a> {
+    /// Evaluates the rule's bindings, leaving the scope ready for its requires.
+    fn for_rule(rule: &IrRule, state: &'a State) -> Self {
+        let mut ev = Evaluator {
+            state,
+            scope: Vec::with_capacity(rule.lets.len()),
+        };
+        for binding in &rule.lets {
+            let value = ev.eval(binding);
+            ev.scope.push(value);
+        }
+        ev
+    }
 
-            ExprKind::Unary(op, operand) => match op {
+    fn eval(&self, e: &IrExpr) -> Value {
+        match &e.kind {
+            IrExprKind::Int(n) => Value::Int(*n),
+            IrExprKind::Float(f) => Value::Float(*f),
+            IrExprKind::Binding(slot) => self.scope[*slot as usize],
+            IrExprKind::Predicate(id, args) => self.apply(*id, args),
+            // Only ever an argument, read as a name by `key` and `arg_name`.
+            IrExprKind::Member(..) => unreachable!("enum member in a value position"),
+
+            IrExprKind::Unary(op, operand) => match op {
                 UnOp::Not => Value::Bool(!expect_bool(self.eval(operand))),
                 UnOp::Neg => match self.eval(operand) {
                     Value::Int(n) => Value::Int(-n),
@@ -130,7 +132,7 @@ impl Evaluator<'_> {
                 },
             },
 
-            ExprKind::Binary(op, left, right) => match op {
+            IrExprKind::Binary(op, left, right) => match op {
                 BinOp::And => {
                     Value::Bool(expect_bool(self.eval(left)) && expect_bool(self.eval(right)))
                 }
@@ -139,8 +141,6 @@ impl Evaluator<'_> {
                 }
                 _ => self.eval_binary(*op, self.eval(left), self.eval(right)),
             },
-
-            ExprKind::Error => unreachable!("evaluated a tree that did not check"),
         }
     }
 
@@ -186,20 +186,7 @@ impl Evaluator<'_> {
         }
     }
 
-    /// A call, dispatched on the predicate name.
-    ///
-    /// Arguments in enum positions are read as *names*, not evaluated:
-    /// `barracks` in `has-role(barracks)` is a literal.
-    fn eval_call(&self, name: &str, args: &[Expr]) -> Value {
-        if name == env::COUNT {
-            return Value::Int(self.count(&args[0]));
-        }
-        let sig =
-            env::predicate(name).unwrap_or_else(|| unreachable!("unknown predicate `{name}`"));
-        self.apply(sig.id, args)
-    }
-
-    fn apply(&self, id: Predicate, args: &[Expr]) -> Value {
+    fn apply(&self, id: Predicate, args: &[IrExpr]) -> Value {
         let st = self.state;
         match id {
             Predicate::AircraftCapacity => Value::Int(st.scalar("aircraft-capacity") as i64),
@@ -296,32 +283,6 @@ impl Evaluator<'_> {
             Predicate::UnitCount => Value::Int(st.type_count(arg_name(&args[0]))),
         }
     }
-
-    /// A bare building or unit name, or any collection-valued expression.
-    fn count(&self, arg: &Expr) -> i64 {
-        if let ExprKind::Ident(name) = &arg.kind
-            && (env::member(Domain::BuildingType, &name.text).is_some()
-                || env::member(Domain::UnitType, &name.text).is_some())
-        {
-            return self.state.type_count(&name.text);
-        }
-        match self.eval(arg) {
-            Value::Int(n) => n,
-            other => unreachable!("count of {other:?}"),
-        }
-    }
-
-    /// A bare name: a `let` binding, or a zero-argument predicate.
-    ///
-    /// Enum literals never reach here — they are read as names in argument
-    /// position and never become values.
-    fn lookup(&self, name: &str) -> Value {
-        if let Some((_, v)) = self.scope.iter().find(|(n, _)| n == name) {
-            return *v;
-        }
-        let sig = env::predicate(name).unwrap_or_else(|| unreachable!("unknown name `{name}`"));
-        self.apply(sig.id, &[])
-    }
 }
 
 /// The literal name of an argument in an enum position.
@@ -329,22 +290,22 @@ impl Evaluator<'_> {
 /// Panics on anything else, which the type checker has already ruled out.
 /// The state key a call is recorded under. Arguments in enum positions are
 /// literal names; numeric ones are rendered so a float argument keys distinctly.
-fn key(name: &str, args: &[Expr]) -> String {
+fn key(name: &str, args: &[IrExpr]) -> String {
     let rendered: Vec<String> = args
         .iter()
         .map(|a| match &a.kind {
-            ExprKind::Ident(n) => n.text.clone(),
-            ExprKind::Int(n) => n.to_string(),
-            ExprKind::Float(f) => crate::state::render_number(*f),
+            IrExprKind::Member(d, i) => env::member_name(*d, *i).to_string(),
+            IrExprKind::Int(n) => n.to_string(),
+            IrExprKind::Float(f) => crate::state::render_number(*f),
             other => unreachable!("unexpected argument {other:?}"),
         })
         .collect();
     crate::state::call_key(name, &rendered)
 }
 
-fn arg_name(e: &Expr) -> &str {
+fn arg_name(e: &IrExpr) -> &str {
     match &e.kind {
-        ExprKind::Ident(name) => &name.text,
+        IrExprKind::Member(d, i) => env::member_name(*d, *i),
         other => unreachable!("expected a name, got {other:?}"),
     }
 }
@@ -373,14 +334,14 @@ mod tests {
     use crate::lexer::lex;
     use crate::parser::parse;
 
-    fn seed() -> Ast {
+    fn seed() -> Ir {
         let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/rules/seed.vy"))
             .expect("seed.vy");
         let (tokens, ld) = lex(&src);
         assert!(ld.is_empty(), "{ld:?}");
         let (ast, pd) = parse(&tokens);
         assert!(pd.is_empty(), "{pd:?}");
-        ast
+        crate::lower::lower(&ast)
     }
 
     /// Keyed state is verbose to write by hand, so these build it from the
@@ -418,11 +379,11 @@ mod tests {
         st
     }
 
-    fn fired(ast: &Ast, st: &State) -> Vec<String> {
-        evaluate(ast, st)
+    fn fired(ir: &Ir, st: &State) -> Vec<String> {
+        evaluate(ir, st)
             .fired
             .into_iter()
-            .map(|r| r.name.text.clone())
+            .map(|r| r.name.clone())
             .collect()
     }
 
@@ -488,7 +449,7 @@ mod tests {
             let (t, _) = lex(&src);
             let (a, d) = parse(&t);
             assert!(d.is_empty(), "{d:?}");
-            a
+            crate::lower::lower(&a)
         };
 
         // Division by zero used to panic here.

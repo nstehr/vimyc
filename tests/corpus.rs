@@ -224,9 +224,9 @@ fn the_differential_corpus_exercises_every_conjunct() {
     let corpus = differential_corpus();
     let cases = &corpus.cases;
     let src = seed_source();
-    let ast = parse_seed();
+    let ir = vimyc::lower::lower(&parse_seed());
 
-    let mut counts: Vec<Vec<(usize, usize)>> = ast
+    let mut counts: Vec<Vec<(usize, usize)>> = ir
         .rules
         .iter()
         .map(|r| vec![(0usize, 0usize); r.requires.len()])
@@ -236,10 +236,10 @@ fn the_differential_corpus_exercises_every_conjunct() {
         if case.skipped {
             continue;
         }
-        let Some(ri) = ast.rules.iter().position(|r| r.name.text == case.rule) else {
+        let Some(ri) = ir.rules.iter().position(|r| r.name == case.rule) else {
             continue;
         };
-        for (ci, held) in vimyc::eval::conjuncts(&ast.rules[ri], &corpus.states[case.state])
+        for (ci, held) in vimyc::eval::conjuncts(&ir.rules[ri], &corpus.states[case.state])
             .iter()
             .enumerate()
         {
@@ -252,19 +252,16 @@ fn the_differential_corpus_exercises_every_conjunct() {
     // conjunct true in 1 of 400 states discriminates on paper while leaving a
     // bug in it almost certain to survive.
     const MIN_SHARE: f64 = 0.05;
-    let per_rule = cases.len() / ast.rules.len();
+    let per_rule = cases.len() / ir.rules.len();
     let floor = (per_rule as f64 * MIN_SHARE) as usize;
 
     let mut thin = Vec::new();
-    for (ri, rule) in ast.rules.iter().enumerate() {
+    for (ri, rule) in ir.rules.iter().enumerate() {
         for (ci, (t, f)) in counts[ri].iter().enumerate() {
             if *t <= floor || *f <= floor {
                 let span = rule.requires[ci].span;
                 let text = &src[span.start as usize..span.end as usize];
-                thin.push(format!(
-                    "  {}: `{text}` — {t} true, {f} false",
-                    rule.name.text
-                ));
+                thin.push(format!("  {}: `{text}` — {t} true, {f} false", rule.name));
             }
         }
     }
@@ -321,7 +318,7 @@ fn differential_corpus() -> DifferentialCorpus {
 fn seed_agrees_with_expr() {
     let corpus = differential_corpus();
     let cases = &corpus.cases;
-    let ast = parse_seed();
+    let ir = vimyc::lower::lower(&parse_seed());
 
     let mut checked = 0usize;
     let mut mismatches = Vec::new();
@@ -331,10 +328,10 @@ fn seed_agrees_with_expr() {
         if case.skipped {
             continue;
         }
-        let rule = ast
+        let rule = ir
             .rules
             .iter()
-            .find(|r| r.name.text == case.rule)
+            .find(|r| r.name == case.rule)
             .unwrap_or_else(|| panic!("line {}: unknown rule `{}`", i + 1, case.rule));
 
         let got = vimyc::eval::rule_fires(rule, &corpus.states[case.state]);

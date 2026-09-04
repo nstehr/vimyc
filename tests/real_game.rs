@@ -98,11 +98,11 @@ fn agrees_with_a_real_game() {
         eprintln!("no recorded game; skipping");
         return;
     };
-    let asts: Vec<_> = c
+    let irs: Vec<_> = c
         .rule_sets
         .iter()
         .enumerate()
-        .map(|(i, s)| parse(s, i))
+        .map(|(i, s)| vimyc::lower::lower(&parse(s, i)))
         .collect();
 
     let mut checked = 0usize;
@@ -113,10 +113,10 @@ fn agrees_with_a_real_game() {
         if case.skipped {
             continue;
         }
-        let Some(rule) = asts[case.rule_set]
+        let Some(rule) = irs[case.rule_set]
             .rules
             .iter()
-            .find(|r| r.name.text == case.rule)
+            .find(|r| r.name == case.rule)
         else {
             panic!("rule set {} has no `{}`", case.rule_set, case.rule);
         };
