@@ -15,6 +15,42 @@ use crate::types::{Domain, ParamType, Type};
 /// Crate-private, and reachable only through `check`. That is what makes the
 /// panics below sound: an unresolved name here would mean `check` accepted
 /// something it should not have, not that a caller skipped it.
+/// Substitutes a `def`'s arguments into its body.
+///
+/// At the AST rather than the IR, which keeps lowering unchanged: the call site
+/// becomes an ordinary expression and is lowered in the caller's scope. Capture
+/// is impossible because `bind` rejects any binding named after a doctrine
+/// parameter or a predicate, and a def body can name nothing else.
+fn inline(def: &crate::ast::Def, args: &[Expr]) -> Expr {
+    fn subst(e: &Expr, bound: &[(String, &Expr)]) -> Expr {
+        let kind = match &e.kind {
+            ExprKind::Ident(name) => {
+                if let Some((_, arg)) = bound.iter().find(|(n, _)| *n == name.text) {
+                    return (*arg).clone();
+                }
+                ExprKind::Ident(name.clone())
+            }
+            ExprKind::Call(name, args) => {
+                ExprKind::Call(name.clone(), args.iter().map(|a| subst(a, bound)).collect())
+            }
+            ExprKind::Unary(op, x) => ExprKind::Unary(*op, Box::new(subst(x, bound))),
+            ExprKind::Binary(op, l, r) => {
+                ExprKind::Binary(*op, Box::new(subst(l, bound)), Box::new(subst(r, bound)))
+            }
+            other => other.clone(),
+        };
+        Expr { kind, span: e.span }
+    }
+
+    let bound: Vec<(String, &Expr)> = def
+        .params
+        .iter()
+        .map(|p| p.name.text.clone())
+        .zip(args)
+        .collect();
+    subst(&def.body, &bound)
+}
+
 pub(crate) fn lower(ast: &Ast) -> Ir {
     let params: Vec<IrParam> = ast
         .params
@@ -28,14 +64,18 @@ pub(crate) fn lower(ast: &Ast) -> Ir {
     // Names in slot order, which is declaration order.
     let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
     Ir {
-        rules: ast.rules.iter().map(|r| lower_rule(r, &names)).collect(),
+        rules: ast
+            .rules
+            .iter()
+            .map(|r| lower_rule(r, &names, &ast.defs))
+            .collect(),
         params,
     }
 }
 
 /// `params` is the file's parameter names, in slot order. Threaded through
 /// because a parameter may appear anywhere an expression may.
-fn lower_rule(rule: &Rule, params: &[String]) -> IrRule {
+fn lower_rule(rule: &Rule, params: &[String], defs: &[crate::ast::Def]) -> IrRule {
     let category = env::category_id(&rule.category.text)
         .unwrap_or_else(|| unreachable!("unknown category `{}`", rule.category.text));
 
@@ -44,7 +84,7 @@ fn lower_rule(rule: &Rule, params: &[String]) -> IrRule {
     let mut scope: Vec<String> = Vec::with_capacity(rule.lets.len());
     let mut lets = Vec::with_capacity(rule.lets.len());
     for binding in &rule.lets {
-        lets.push(lower_expr(&binding.value, &scope, params));
+        lets.push(lower_expr(&binding.value, &scope, params, defs));
         scope.push(binding.name.text.clone());
     }
 
@@ -52,15 +92,15 @@ fn lower_rule(rule: &Rule, params: &[String]) -> IrRule {
         name: rule.name.text.clone(),
         // Only parameters are in scope: the checker has already rejected a
         // priority that mentions a binding or a predicate.
-        priority: lower_expr(&rule.priority, &[], params),
+        priority: lower_expr(&rule.priority, &[], params, defs),
 
         category: CategoryId(category),
         exclusive: rule.exclusive,
-        action: lower_action(&rule.action, &scope, params),
+        action: lower_action(&rule.action, &scope, params, defs),
         requires: rule
             .requires
             .iter()
-            .map(|r| lower_expr(r, &scope, params))
+            .map(|r| lower_expr(r, &scope, params, defs))
             .collect(),
         lets,
         name_span: rule.name.span,
@@ -68,7 +108,12 @@ fn lower_rule(rule: &Rule, params: &[String]) -> IrRule {
     }
 }
 
-fn lower_action(action: &Action, scope: &[String], params: &[String]) -> IrAction {
+fn lower_action(
+    action: &Action,
+    scope: &[String],
+    params: &[String],
+    defs: &[crate::ast::Def],
+) -> IrAction {
     let id = env::action_id(&action.name.text)
         .unwrap_or_else(|| unreachable!("unknown action `{}`", action.name.text));
 
@@ -81,8 +126,8 @@ fn lower_action(action: &Action, scope: &[String], params: &[String]) -> IrActio
         .iter()
         .enumerate()
         .map(|(i, a)| match sig.and_then(|s| s.params.get(i)) {
-            Some(want) => lower_arg(a, want, scope, params),
-            None => lower_expr(a, scope, params),
+            Some(want) => lower_arg(a, want, scope, params, defs),
+            None => lower_expr(a, scope, params, defs),
         })
         .collect();
 
@@ -94,7 +139,7 @@ fn lower_action(action: &Action, scope: &[String], params: &[String]) -> IrActio
 }
 
 /// `scope` maps a binding's name to its slot, so `Ident` becomes `Binding(n)`.
-fn lower_expr(e: &Expr, scope: &[String], params: &[String]) -> IrExpr {
+fn lower_expr(e: &Expr, scope: &[String], params: &[String], defs: &[crate::ast::Def]) -> IrExpr {
     let kind = match &e.kind {
         ExprKind::Int(n) => IrExprKind::Int(*n),
         ExprKind::Float(f) => IrExprKind::Float(*f),
@@ -102,13 +147,18 @@ fn lower_expr(e: &Expr, scope: &[String], params: &[String]) -> IrExpr {
 
         ExprKind::Call(name, args) => {
             if name.text == env::COUNT {
-                return lower_count(&args[0], e.span, scope, params);
+                return lower_count(&args[0], e.span, scope, params, defs);
+            }
+            // A def is expanded here rather than represented in the IR: the
+            // emitted rule must look exactly like Go's, which has no defs.
+            if let Some(def) = defs.iter().find(|d| d.name.text == name.text) {
+                return lower_expr(&inline(def, args), scope, params, defs);
             }
             if let Some(sig) = env::builtin(&name.text) {
                 let args = args
                     .iter()
                     .zip(sig.params.iter())
-                    .map(|(a, want)| lower_arg(a, want, scope, params))
+                    .map(|(a, want)| lower_arg(a, want, scope, params, defs))
                     .collect();
                 return IrExpr {
                     kind: IrExprKind::Builtin(sig.id, args),
@@ -120,18 +170,18 @@ fn lower_expr(e: &Expr, scope: &[String], params: &[String]) -> IrExpr {
             let args = args
                 .iter()
                 .zip(sig.params.iter())
-                .map(|(a, want)| lower_arg(a, want, scope, params))
+                .map(|(a, want)| lower_arg(a, want, scope, params, defs))
                 .collect();
             IrExprKind::Predicate(sig.id, args)
         }
 
         ExprKind::Unary(op, operand) => {
-            IrExprKind::Unary(*op, Box::new(lower_expr(operand, scope, params)))
+            IrExprKind::Unary(*op, Box::new(lower_expr(operand, scope, params, defs)))
         }
         ExprKind::Binary(op, l, r) => IrExprKind::Binary(
             *op,
-            Box::new(lower_expr(l, scope, params)),
-            Box::new(lower_expr(r, scope, params)),
+            Box::new(lower_expr(l, scope, params, defs)),
+            Box::new(lower_expr(r, scope, params, defs)),
         ),
 
         ExprKind::Error => unreachable!("lowered a tree that did not check"),
@@ -141,22 +191,28 @@ fn lower_expr(e: &Expr, scope: &[String], params: &[String]) -> IrExpr {
 
 /// An argument in a position whose parameter type is known, which is what lets a
 /// bare name resolve to an enum member.
-fn lower_arg(e: &Expr, want: &ParamType, scope: &[String], params: &[String]) -> IrExpr {
+fn lower_arg(
+    e: &Expr,
+    want: &ParamType,
+    scope: &[String],
+    params: &[String],
+    defs: &[crate::ast::Def],
+) -> IrExpr {
     let ExprKind::Ident(name) = &e.kind else {
-        return lower_expr(e, scope, params);
+        return lower_expr(e, scope, params, defs);
     };
 
     // A binding shadows nothing — `bind` rejects any name that could — so a name
     // in scope is a binding and never an enum literal.
     if scope.iter().any(|n| n == &name.text) {
-        return lower_expr(e, scope, params);
+        return lower_expr(e, scope, params, defs);
     }
 
     let domains: &[Domain] = match want {
         ParamType::AnyOf(ds) => ds,
         ParamType::Exact(Type::Enum(d)) => std::slice::from_ref(d),
         // Not an enum position, so the argument is an ordinary expression.
-        ParamType::Exact(_) => return lower_expr(e, scope, params),
+        ParamType::Exact(_) => return lower_expr(e, scope, params, defs),
     };
 
     for d in domains {
@@ -174,7 +230,13 @@ fn lower_arg(e: &Expr, want: &ParamType, scope: &[String], params: &[String]) ->
 /// `count(idle-ground-units)` are three different predicates, and which one is
 /// decided here rather than at every consumer. Nothing downstream sees a
 /// `count` node.
-fn lower_count(arg: &Expr, span: Span, scope: &[String], params: &[String]) -> IrExpr {
+fn lower_count(
+    arg: &Expr,
+    span: Span,
+    scope: &[String],
+    params: &[String],
+    defs: &[crate::ast::Def],
+) -> IrExpr {
     // A bare building or unit name counts instances of that type.
     if let ExprKind::Ident(name) = &arg.kind
         && !scope.iter().any(|n| n == &name.text)
@@ -200,7 +262,7 @@ fn lower_count(arg: &Expr, span: Span, scope: &[String], params: &[String]) -> I
 
     // Otherwise it counts a collection, and the collection predicate is already
     // the whole expression — `count` itself disappears.
-    lower_expr(arg, scope, params)
+    lower_expr(arg, scope, params, defs)
 }
 
 /// A bare name: a binding, a parameter, or a zero-argument predicate.

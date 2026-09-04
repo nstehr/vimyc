@@ -433,6 +433,32 @@ no conjuncts at all, and expr will not compile an empty condition. The emitter
 writes `true` for it. The same hole was already reachable by writing a rule with
 no `require`, where it produced `unexpected token EOF` from Go.
 
+### `def`
+
+The language's only abstraction, added for one shape. Go's
+`buildCashCondition(cost, savings)` expands to a cash floor plus up to five
+conditional clauses that keep unit production from starving a queued building,
+and it is called from twenty-one rules differing only in the unit cost:
+
+```
+def reserves(cost: int) =
+  cash >= cost
+  and (vehicle-weight <= 0.2 or has-role(war-factory) or not has-role(radar)
+       or cash >= cost + 2000)
+  and ...
+```
+
+Written out instead, that is about a hundred near-identical `require` lines that
+a reader cannot scan and a hand-port gets wrong.
+
+Inlined at lowering, at the AST, so the emitted rule looks exactly like Go's —
+which has no defs — and lowering itself is unchanged. Capture is impossible:
+`bind` already rejects a binding named after a doctrine parameter or a
+predicate, and a def body can name nothing else.
+
+Only earlier defs are in scope, which is what rules out recursion. That is not a
+restriction anyone will notice, and inlining has to terminate.
+
 ### Not parameters
 
 Doctrine also carries `PreferredInfantry` and friends — `[]string` preferences

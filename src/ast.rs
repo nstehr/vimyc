@@ -10,7 +10,29 @@ use crate::diag::Span;
 pub struct Ast {
     /// Doctrine inputs, file-scoped and constant within a doctrine window.
     pub params: Vec<Param>,
+    /// Named expressions, inlined at their call sites.
+    pub defs: Vec<Def>,
     pub rules: Vec<Rule>,
+}
+
+/// A `def`: one expression, given a name and some arguments.
+///
+/// The language's only abstraction, and it exists for one shape — Go's
+/// `buildCashCondition`, whose five conditional clauses appear at twenty-one
+/// call sites differing only in a unit cost.
+#[derive(Debug)]
+pub struct Def {
+    pub name: Name,
+    pub params: Vec<DefParam>,
+    pub body: Expr,
+    pub span: Span,
+}
+
+#[derive(Debug)]
+pub struct DefParam {
+    pub name: Name,
+    pub kind: ParamKind,
+    pub span: Span,
 }
 
 /// A `param` declaration.
@@ -75,13 +97,13 @@ pub struct Let {
     pub span: Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Expr {
     pub kind: ExprKind,
     pub span: Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExprKind {
     Int(i64),
     Float(f64),

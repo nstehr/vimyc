@@ -6,7 +6,9 @@
 //!
 //! Reasoning is in `docs/implementation.md`.
 
-use crate::ast::{Action, Ast, BinOp, Expr, ExprKind, Let, Name, Param, ParamKind, Rule, UnOp};
+use crate::ast::{
+    Action, Ast, BinOp, Def, DefParam, Expr, ExprKind, Let, Name, Param, ParamKind, Rule, UnOp,
+};
 use crate::diag::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
 
@@ -35,6 +37,7 @@ impl<'a> Parser<'a> {
 
     fn parse(&mut self) -> Ast {
         let mut params = Vec::new();
+        let mut defs = Vec::new();
         let mut rules = Vec::new();
         while !self.at_end() {
             if self.peek() == &TokenKind::Param {
@@ -44,12 +47,97 @@ impl<'a> Parser<'a> {
                 }
                 continue;
             }
+            if self.peek() == &TokenKind::Def {
+                match self.def() {
+                    Some(d) => defs.push(d),
+                    None => self.recover(),
+                }
+                continue;
+            }
             match self.rule() {
                 Some(r) => rules.push(r),
                 None => self.recover(),
             }
         }
-        Ast { params, rules }
+        Ast {
+            params,
+            defs,
+            rules,
+        }
+    }
+
+    /// `def reserves(cost: int) = cash >= cost and ...`
+    ///
+    /// One expression, so there is no body to terminate and no `return`.
+    fn def(&mut self) -> Option<Def> {
+        let start = self.peek_span();
+        self.bump(); // `def`
+        let name = self.name()?;
+
+        let mut params = Vec::new();
+        if !self.eat(&TokenKind::LParen) {
+            self.error(self.peek_span(), "expected `(` after the def name".into());
+            return None;
+        }
+        if !self.at(&TokenKind::RParen) {
+            loop {
+                let p = self.def_param()?;
+                params.push(p);
+                if !self.eat(&TokenKind::Comma) {
+                    break;
+                }
+            }
+        }
+        if !self.eat(&TokenKind::RParen) {
+            self.error(
+                self.peek_span(),
+                "expected `)` to close the parameters".into(),
+            );
+            return None;
+        }
+        if !self.eat(&TokenKind::Eq) {
+            self.error(self.peek_span(), "expected `=` after the parameters".into());
+            return None;
+        }
+
+        let body = self.expr();
+        let span = start.to(body.span);
+        Some(Def {
+            name,
+            params,
+            body,
+            span,
+        })
+    }
+
+    /// `cost: int`, the same shape as a `param` without the keyword.
+    fn def_param(&mut self) -> Option<DefParam> {
+        let name = self.name()?;
+        if !self.eat(&TokenKind::Colon) {
+            self.error(
+                self.peek_span(),
+                "expected `:` after the parameter name".into(),
+            );
+            return None;
+        }
+        let kind = match self.peek() {
+            TokenKind::FloatType => ParamKind::Float,
+            TokenKind::IntType => ParamKind::Int,
+            _ => {
+                self.error(
+                    self.peek_span(),
+                    "expected `float` or `int` after `:`".into(),
+                );
+                return None;
+            }
+        };
+        let end = self.peek_span();
+        self.bump();
+        Some(DefParam {
+            name: name.clone(),
+            kind,
+            span: name.span.to(end),
+        })
     }
 
     /// `param aggression: float`
@@ -535,7 +623,11 @@ impl<'a> Parser<'a> {
         // construct this is aiming for. Progress is still guaranteed, because
         // both `rule` and `param` consume their keyword before they can return
         // `None` on it.
-        while !self.at_end() && !self.at(&TokenKind::Rule) && !self.at(&TokenKind::Param) {
+        while !self.at_end()
+            && !self.at(&TokenKind::Rule)
+            && !self.at(&TokenKind::Param)
+            && !self.at(&TokenKind::Def)
+        {
             self.bump();
         }
     }

@@ -2,7 +2,13 @@
 ; Lines beginning with `;` are comments on this grammar, not language syntax.
 ; The language itself has no comment form — see `because`.
 
-<program>        ::= ( <param> | <rule> )*
+<program>        ::= ( <param> | <def> | <rule> )*
+
+; A named expression, inlined at its call sites. Only earlier defs are in
+; scope, so nothing here can recurse. See docs/design.md, "def".
+<def>            ::= "def" <name> "(" [ <def-params> ] ")" "=" <expr>
+<def-params>     ::= <def-param> ( "," <def-param> )*
+<def-param>      ::= <name> ":" <param-type>
 
 ; A doctrine input: file-scoped, constant within a doctrine window, supplied
 ; from outside the file. See docs/design.md, "Parameters".
@@ -104,7 +110,7 @@
 
 <keyword>        ::= "rule" | "priority" | "category" | "exclusive" | "do"
                    | "require" | "because" | "let" | "and" | "or" | "not"
-                   | "exists" | "param" | "int" | "float"
+                   | "exists" | "param" | "def" | "int" | "float"
 
 ; Builtins are ordinary call syntax, not keywords: `lerp`, `lerpf`, `max`,
 ; `min`, `trunc`, `select`. They are rejected as binding and parameter names by

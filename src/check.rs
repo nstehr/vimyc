@@ -43,6 +43,9 @@ pub fn check(ast: &Ast) -> Result<Checked, Vec<Diagnostic>> {
 /// instead, so it cannot outlive the rule it belongs to.
 struct Checker {
     diags: Vec<Diagnostic>,
+    /// Signatures of the `def`s declared so far, in order. A def may call an
+    /// earlier one, which is what rules out recursion — and inlining needs that.
+    defs: Vec<DefSig>,
     /// Declared parameters, by name. File-scoped, so unlike a `let` this lives
     /// on the whole-set checker rather than on `RuleChecker`.
     params: Vec<(String, Type)>,
@@ -82,6 +85,13 @@ fn reserved(name: &str) -> Option<String> {
     None
 }
 
+/// A `def`'s signature, once its body has been checked.
+struct DefSig {
+    name: String,
+    params: Vec<Type>,
+    ret: Type,
+}
+
 /// One rule's checking pass.
 ///
 /// The scope lives here rather than on `Checker` so a stale binding is
@@ -93,6 +103,7 @@ struct RuleChecker<'a> {
     scope: Vec<(String, Type)>,
     /// Borrowed from `Checker`: parameters outlive every rule.
     params: &'a [(String, Type)],
+    defs: &'a [DefSig],
     /// Which evaluation the expression being checked belongs to.
     phase: Phase,
 }
@@ -101,6 +112,7 @@ impl Checker {
     fn new() -> Self {
         Checker {
             diags: Vec::new(),
+            defs: Vec::new(),
             params: Vec::new(),
         }
     }
@@ -108,15 +120,69 @@ impl Checker {
     fn run(&mut self, ast: &Ast) {
         // Before any rule, since every rule may refer to them.
         self.declare_params(&ast.params);
+        self.declare_defs(&ast.defs);
 
         for rule in &ast.rules {
             RuleChecker {
                 diags: &mut self.diags,
                 scope: Vec::new(),
                 params: &self.params,
+                defs: &self.defs,
                 phase: Phase::Tick,
             }
             .rule(rule);
+        }
+    }
+
+    /// Checks each `def` body and records what it returns.
+    ///
+    /// In order, with only earlier defs in scope: a def cannot call itself or a
+    /// later one, so inlining terminates.
+    fn declare_defs(&mut self, defs: &[crate::ast::Def]) {
+        for d in defs {
+            let name = &d.name.text;
+            if let Some(why) = reserved(name) {
+                let msg = format!("{why} and cannot be a def");
+                self.diags.push(Diagnostic::error(d.name.span, msg));
+                continue;
+            }
+            if self.defs.iter().any(|s| s.name == *name)
+                || self.params.iter().any(|(n, _)| n == name)
+            {
+                let msg = format!("`{name}` is already declared");
+                self.diags.push(Diagnostic::error(d.name.span, msg));
+                continue;
+            }
+
+            // The def's own parameters are its scope, and nothing else local is.
+            let mut checker = RuleChecker {
+                diags: &mut self.diags,
+                scope: Vec::new(),
+                params: &self.params,
+                defs: &self.defs,
+                phase: Phase::Tick,
+            };
+            for p in &d.params {
+                let ty = match p.kind {
+                    ParamKind::Int => Type::Int,
+                    ParamKind::Float => Type::Float,
+                };
+                checker.bind(&p.name, ty);
+            }
+            let ret = checker.synth(&d.body);
+
+            self.defs.push(DefSig {
+                name: name.clone(),
+                params: d
+                    .params
+                    .iter()
+                    .map(|p| match p.kind {
+                        ParamKind::Int => Type::Int,
+                        ParamKind::Float => Type::Float,
+                    })
+                    .collect(),
+                ret,
+            });
         }
     }
 
@@ -276,6 +342,16 @@ impl<'a> RuleChecker<'a> {
                         return self.not_static(what, &n.text, n.span);
                     }
                     self.count(args, n.span)
+                } else if let Some(sig) = self.defs.iter().find(|d| d.name == n.text) {
+                    // Inlined at lowering, so a def is as static as its body and
+                    // its arguments — no phase rule of its own.
+                    let params: Vec<ParamType> = sig
+                        .params
+                        .iter()
+                        .map(|t| ParamType::Exact(t.clone()))
+                        .collect();
+                    let ret = sig.ret.clone();
+                    self.call(&n.text, n.span, args, &params, &ret)
                 } else if let Some(sig) = env::builtin(&n.text) {
                     // Legal in either phase: a builtin reads no state, which is
                     // the whole reason it is not a predicate.
@@ -848,5 +924,67 @@ mod tests {
             "count(damaged-combat-units(0.25 + 0.25)) > 0",
         ));
         assert!(e.is_empty(), "{e:?}");
+    }
+
+    /// A `def` is the language's only abstraction, and it exists so the savings
+    /// stack is written once rather than at twenty-one call sites.
+    #[test]
+    fn a_def_is_checked_like_any_expression() {
+        // Arity and argument types are the call's, the result type is the body's.
+        let src = "def reserve(cost: int) = cash >= cost\n\
+                   rule r {\n priority 1\n category economy\n do scout\n \
+                   require reserve(100)\n}\n";
+        assert!(messages(src).is_empty(), "{:?}", messages(src));
+
+        let bad = "def reserve(cost: int) = cash >= cost\n\
+                   rule r {\n priority 1\n category economy\n do scout\n \
+                   require reserve(100, 200)\n}\n";
+        let e = messages(bad);
+        assert!(e.iter().any(|m| m.contains("expects 1 argument")), "{e:?}");
+
+        // The body's type is what the call has, so a numeric def is not a
+        // condition.
+        let numeric = "def half(x: float) = x / 2.0\n\
+                       rule r {\n priority 1\n category economy\n do scout\n \
+                       require half(1.0)\n}\n";
+        let e = messages(numeric);
+        assert!(e.iter().any(|m| m.contains("expected bool")), "{e:?}");
+    }
+
+    #[test]
+    fn a_def_cannot_take_a_reserved_or_repeated_name() {
+        for (src, want) in [
+            ("def cash(x: int) = x > 0\n", "is a predicate"),
+            ("def lerp(x: int) = x > 0\n", "is a builtin"),
+            (
+                "def a(x: int) = x > 0\ndef a(y: int) = y > 1\n",
+                "already declared",
+            ),
+            (
+                "param a: float\ndef a(x: int) = x > 0\n",
+                "already declared",
+            ),
+        ] {
+            let full = format!(
+                "{src}rule r {{\n priority 1\n category economy\n do scout\n \
+                 require cash >= 1\n}}\n"
+            );
+            let e = messages(&full);
+            assert!(e.iter().any(|m| m.contains(want)), "{src}: {e:?}");
+        }
+    }
+
+    /// Only earlier defs are in scope, so a def cannot call itself and inlining
+    /// terminates.
+    #[test]
+    fn a_def_cannot_be_recursive() {
+        let src = "def loop(x: int) = loop(x) and cash >= x\n\
+                   rule r {\n priority 1\n category economy\n do scout\n \
+                   require loop(1)\n}\n";
+        let e = messages(src);
+        assert!(
+            e.iter().any(|m| m.contains("unknown predicate `loop`")),
+            "{e:?}"
+        );
     }
 }

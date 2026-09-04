@@ -36,6 +36,7 @@ pub enum TokenKind {
     Not,
     Exists,
     Param,
+    Def,
     /// The type in a parameter declaration. Named apart from `Int`/`Float`,
     /// which are literals.
     IntType,
@@ -86,6 +87,7 @@ impl TokenKind {
             "not" => TokenKind::Not,
             "exists" => TokenKind::Exists,
             "param" => TokenKind::Param,
+            "def" => TokenKind::Def,
             "int" => TokenKind::IntType,
             "float" => TokenKind::FloatType,
             _ => return None,
