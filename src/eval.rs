@@ -90,7 +90,18 @@ pub(crate) fn static_eval(e: &IrExpr, params: &ParamValues) -> Value {
             apply_builtin(*id, &args)
         }
         IrExprKind::Unary(op, operand) => unary(*op, static_eval(operand, params)),
-        IrExprKind::Binary(op, l, r) => binary(*op, static_eval(l, params), static_eval(r, params)),
+        // `and` and `or` are handled here rather than in `binary` for the same
+        // reason as in the tick evaluator: they short-circuit, which an already
+        // evaluated pair of operands cannot.
+        IrExprKind::Binary(op, l, r) => match op {
+            BinOp::And => Value::Bool(
+                expect_bool(static_eval(l, params)) && expect_bool(static_eval(r, params)),
+            ),
+            BinOp::Or => Value::Bool(
+                expect_bool(static_eval(l, params)) || expect_bool(static_eval(r, params)),
+            ),
+            _ => binary(*op, static_eval(l, params), static_eval(r, params)),
+        },
         other => unreachable!("`{other:?}` reads state and cannot be static"),
     }
 }

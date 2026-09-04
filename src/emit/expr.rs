@@ -108,7 +108,11 @@ fn emit_bare(e: &IrExpr, rule: &IrRule, params: &ParamValues, out: &mut String) 
         IrExprKind::Param(_) | IrExprKind::Builtin(..) => out.push_str(&fold(e, params)),
         IrExprKind::Member(domain, index) => out.push_str(env::member_name(*domain, *index)),
         IrExprKind::Binding(slot) => emit_bare(&rule.lets[*slot as usize], rule, params, out),
-        other => unreachable!("action argument is not a literal: {other:?}"),
+        // Static but not a literal — `retreat-damaged-units(0.25 + 0.25)`, or
+        // anything computed from a parameter. Go looks an action up by this
+        // text, so it has to be the number.
+        _ if crate::specialise::is_static(e) => out.push_str(&fold(e, params)),
+        other => unreachable!("action argument is not static: {other:?}"),
     }
 }
 

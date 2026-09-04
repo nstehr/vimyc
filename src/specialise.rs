@@ -160,4 +160,57 @@ mod tests {
             .collect();
         assert_eq!(before, after);
     }
+
+    /// A gate can be a conjunction or a disjunction, and those short-circuit —
+    /// which `binary` cannot do, since its operands are already values.
+    #[test]
+    fn a_compound_gate_folds() {
+        let src = "param naval-weight: float\nparam aggression: float\n\
+                   rule both {\n priority 1\n category combat\n \
+                   do squad-defend(naval-attack)\n \
+                   require naval-weight >= 0.3 and aggression > 0.5\n \
+                   require squad-exists(naval-attack)\n}\n\
+                   rule either {\n priority 2\n category combat\n \
+                   do squad-attack-move(naval-attack)\n \
+                   require naval-weight >= 0.9 or aggression > 0.5\n \
+                   require squad-exists(naval-attack)\n}\n";
+        let (tokens, _) = lexer::lex(src);
+        let (ast, pd) = parser::parse(&tokens);
+        assert!(pd.is_empty(), "{pd:?}");
+
+        for (naval, aggression, want) in [
+            (0.4, 0.7, vec!["both", "either"]),
+            // `both` fails its conjunction; `either` still holds by aggression.
+            (0.1, 0.7, vec!["either"]),
+            // Neither disjunct holds.
+            (0.1, 0.2, Vec::new()),
+        ] {
+            let mut ir = check::check(&ast).expect("checks").ir;
+            let params = ParamValues::bind(
+                &ir,
+                &HashMap::from([
+                    ("naval-weight".to_string(), naval),
+                    ("aggression".to_string(), aggression),
+                ]),
+            )
+            .expect("binds");
+            specialise(&mut ir, &params);
+            assert_eq!(names(&ir), want, "naval {naval}, aggression {aggression}");
+        }
+    }
+
+    /// An action argument may be any static expression, and Go finds the
+    /// function by this text — so it has to be the number, not the sum.
+    #[test]
+    fn a_computed_action_argument_is_folded() {
+        let src = "rule r {\n priority 1\n category micro\n \
+                   do retreat-damaged-units(0.25 + 0.25)\n \
+                   require count(damaged-combat-units(0.5)) > 0\n}\n";
+        let (tokens, _) = lexer::lex(src);
+        let (ast, _) = parser::parse(&tokens);
+        let ir = check::check(&ast).expect("checks").ir;
+        let emit::Artifact::Expr(rules) =
+            emit::emit(&ir, &ParamValues::default(), emit::Target::Expr);
+        assert_eq!(rules[0].action, "retreat-damaged-units(0.5)");
+    }
 }
