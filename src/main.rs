@@ -16,7 +16,7 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    const USAGE: &str = "usage: vimyc <file> [state.json] [--json] [--params <file>]";
+    const USAGE: &str = "usage: vimyc <file> [state.json] [--json] [--params <file>|-]";
 
     // Explicit rather than scanning for flags: `--params` with nothing after it
     // used to index past the end, and stray positional arguments were dropped
@@ -83,7 +83,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
     report(&src, &checked.warnings);
 
-    let supplied = match &params_path {
+    let supplied = match params_path.as_deref() {
+        // `-` for stdin, so a caller compiling a doctrine per game window needs
+        // no temporary file.
+        Some("-") => {
+            let mut json = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(), &mut json)
+                .map_err(|e| format!("stdin: {e}"))?;
+            serde_json::from_str(&json).map_err(|e| format!("stdin: {e}"))?
+        }
         Some(p) => {
             let json = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?;
             serde_json::from_str(&json).map_err(|e| format!("{p}: {e}"))?
