@@ -451,6 +451,11 @@ def reserves(cost: int) =
 Written out instead, that is about a hundred near-identical `require` lines that
 a reader cannot scan and a hand-port gets wrong.
 
+It earned its keep beyond that one shape. `attack-priority` appears in thirteen
+combat rules, the infantry base priority in six production ones, and the
+five-way ground-defense disjunction in two — each a name now rather than a
+repetition. A def inlines, so none of it changes what is emitted.
+
 Inlined at lowering, at the AST, so the emitted rule looks exactly like Go's —
 which has no defs — and lowering itself is unchanged. Capture is impossible:
 `bind` already rejects a binding named after a doctrine parameter or a

@@ -13,6 +13,10 @@ param naval-attack-group-size: int
 def activation() =
   select(commit-ratio > 0.0, commit-ratio, lerpf(0.6, 1.0, 1.0 - aggression))
 
+def attack-priority() = lerp(200, 400, aggression)
+
+def defend-priority() = lerp(350, 500, ground-defense-priority)
+
 def ground-form-threshold() = trunc(max(3.0, ground-attack-group-size * 6 / 10))
 
 def defense-floor-holds() =
@@ -21,7 +25,7 @@ def defense-floor-holds() =
      + role-count(flame-tower) + role-count(tesla-coil) >= base-defense-floor
 
 rule form-defense-squad {
-  priority lerp(350, 500, ground-defense-priority) + 5
+  priority defend-priority() + 5
   category squad-form
   because "reserve defenders only when there is also enough surplus to form an attack squad"
   do form-squad(ground-defense, Ground, lerp(2, 5, ground-defense-priority), Defend)
@@ -35,7 +39,7 @@ rule form-defense-squad {
 }
 
 rule squad-defend-base {
-  priority lerp(350, 500, ground-defense-priority)
+  priority defend-priority()
   category combat
   do squad-defend(ground-defense)
   require ground-defense-priority > 0.3
@@ -45,7 +49,7 @@ rule squad-defend-base {
 }
 
 rule defend-base {
-  priority lerp(350, 500, ground-defense-priority)
+  priority defend-priority()
   category combat
   because "no reserved squad at low defense priority, so scramble whatever is idle"
   do defend-base
@@ -63,7 +67,7 @@ rule defend-base-air {
 }
 
 rule form-ground-attack {
-  priority lerp(200, 400, aggression) + 5
+  priority attack-priority() + 5
   category squad-form
   do form-squad(ground-attack, Ground, ground-attack-group-size, Attack)
   require (not squad-exists(ground-attack)
@@ -72,7 +76,7 @@ rule form-ground-attack {
 }
 
 rule squad-attack {
-  priority lerp(200, 400, aggression)
+  priority attack-priority()
   category ground-attack-choice exclusive
   do squad-attack-move(ground-attack)
   require squad-exists(ground-attack)
@@ -82,7 +86,7 @@ rule squad-attack {
 }
 
 rule squad-reengage {
-  priority lerp(200, 400, aggression) - 2
+  priority attack-priority() - 2
   category combat
   because "catches stragglers finishing an order while the squad presses forward"
   do squad-attack-move(ground-attack)
@@ -93,8 +97,8 @@ rule squad-reengage {
 
 rule squad-attack-known-base {
   priority trunc(select(aggression >= 0.3,
-                        lerp(200, 400, aggression) + 5,
-                        lerp(200, 400, aggression) - 10))
+                        attack-priority() + 5,
+                        attack-priority() - 10))
   category ground-attack-choice exclusive
   because "aggressive doctrines press the base and let base defenses handle raiders"
   do squad-attack-known-base(ground-attack, aggression)
@@ -105,7 +109,7 @@ rule squad-attack-known-base {
 }
 
 rule form-air-attack {
-  priority lerp(200, 400, aggression) - 5 + 5
+  priority attack-priority() - 5 + 5
   category squad-form
   do form-squad(air-attack, Air, air-attack-group-size, Attack)
   require air-weight > 0.1
@@ -115,7 +119,7 @@ rule form-air-attack {
 }
 
 rule squad-air-attack {
-  priority lerp(200, 400, aggression) - 5
+  priority attack-priority() - 5
   category air-combat
   do squad-air-strike(air-attack)
   require air-weight > 0.1
@@ -125,7 +129,7 @@ rule squad-air-attack {
 }
 
 rule squad-air-reengage {
-  priority lerp(200, 400, aggression) - 5 - 2
+  priority attack-priority() - 5 - 2
   category air-combat
   do squad-air-strike(air-attack)
   require air-weight > 0.1
@@ -135,7 +139,7 @@ rule squad-air-reengage {
 }
 
 rule squad-air-attack-known-base {
-  priority lerp(200, 400, aggression) - 5 - 10
+  priority attack-priority() - 5 - 10
   category air-combat
   do squad-attack-known-base(air-attack, aggression)
   require air-weight > 0.1
@@ -146,7 +150,7 @@ rule squad-air-attack-known-base {
 }
 
 rule form-naval-attack {
-  priority lerp(200, 400, aggression) - 15 + 5
+  priority attack-priority() - 15 + 5
   category squad-form
   do form-squad(naval-attack, Naval, naval-attack-group-size, Attack)
   require naval-weight > 0.1
@@ -157,7 +161,7 @@ rule form-naval-attack {
 }
 
 rule squad-naval-attack {
-  priority lerp(200, 400, aggression) - 15
+  priority attack-priority() - 15
   category naval-combat
   do squad-attack-move(naval-attack)
   require naval-weight > 0.1
@@ -168,7 +172,7 @@ rule squad-naval-attack {
 }
 
 rule squad-naval-reengage {
-  priority lerp(200, 400, aggression) - 15 - 2
+  priority attack-priority() - 15 - 2
   category naval-combat
   do squad-attack-move(naval-attack)
   require naval-weight > 0.1
@@ -179,7 +183,7 @@ rule squad-naval-reengage {
 }
 
 rule squad-naval-attack-known-base {
-  priority lerp(200, 400, aggression) - 15 - 10
+  priority attack-priority() - 15 - 10
   category naval-combat
   do squad-attack-known-base(naval-attack, aggression)
   require naval-weight > 0.1

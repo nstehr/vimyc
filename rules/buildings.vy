@@ -12,6 +12,18 @@ param prefers-radar-gated-primary: int
 param prefers-v2-launcher: int
 param prefers-artillery: int
 
+def any-ground-defense-buildable() =
+  can-build-role(pillbox) or can-build-role(camo-pillbox) or can-build-role(turret)
+  or can-build-role(flame-tower) or can-build-role(tesla-coil)
+
+def ground-defense-count() =
+  role-count(pillbox) + role-count(camo-pillbox) + role-count(turret)
+  + role-count(flame-tower) + role-count(tesla-coil)
+
+def defense-cap() = lerp(2, 10, ground-defense-priority)
+
+def war-factory-base() = lerp(580, 730, vehicle-weight)
+
 rule build-radar {
   priority trunc(select(prefers-radar-gated-primary > 0, 710.0, 570.0))
   category economy exclusive
@@ -47,10 +59,10 @@ rule build-war-factory {
   priority trunc(max(select(naval-weight > 0.1 or air-weight > 0.1, 685.0, 0.0),
                      max(select(prefers-v2-launcher > 0 or prefers-artillery > 0, 720.0, 0.0),
                          select(transport-assault > 0.2,
-                                max(lerp(580, 730, vehicle-weight),
+                                max(war-factory-base(),
                                     lerp(600, 700, transport-assault))
                                   + lerp(0, 40, transport-assault),
-                                lerp(580, 730, vehicle-weight)))))
+                                war-factory-base()))))
   category economy exclusive
   because "vehicles are universally useful, so the war factory precedes naval and air yards"
   do produce-war-factory
@@ -128,8 +140,8 @@ rule build-base-defense {
   require ground-defense-priority > 0.2
   require not queue-busy(Defense)
   require power-excess >= 0
-  require can-build-role(pillbox) or can-build-role(camo-pillbox) or can-build-role(turret) or can-build-role(flame-tower) or can-build-role(tesla-coil)
-  require role-count(pillbox) + role-count(camo-pillbox) + role-count(turret) + role-count(flame-tower) + role-count(tesla-coil) < lerp(2, 10, ground-defense-priority)
+  require any-ground-defense-buildable()
+  require ground-defense-count() < defense-cap()
   require cash >= lerp(1500, 300, ground-defense-priority)
 }
 
@@ -142,8 +154,8 @@ rule build-base-defense-rush {
   require is-rushed()
   require not queue-busy(Defense)
   require power-excess >= 0
-  require can-build-role(pillbox) or can-build-role(camo-pillbox) or can-build-role(turret) or can-build-role(flame-tower) or can-build-role(tesla-coil)
-  require role-count(pillbox) + role-count(camo-pillbox) + role-count(turret) + role-count(flame-tower) + role-count(tesla-coil) < lerp(2, 10, ground-defense-priority)
+  require any-ground-defense-buildable()
+  require ground-defense-count() < defense-cap()
   require cash >= 200
 }
 

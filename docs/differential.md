@@ -9,7 +9,8 @@ as the shape of the thing rather than as live counts.
 
 The end state: **16,317 rule evaluations from a real 31,950-tick game, no
 disagreements**, across 49 doctrine-compiled rule sets that all parse and type
-check — plus 5,200 synthetic comparisons on the seed rules.
+check — plus 5,200 synthetic comparisons on the seed rules, and **45,635 rules
+across 532 doctrines** once `CompileDoctrine` itself was ported.
 
 ## The bugs vimyc found in Vimy
 
@@ -143,6 +144,24 @@ conjunct, changing the float format. Two tests passed vacuously until that was
 done — the key-rendering one above, and an early `ActionRegistry` guard whose
 exclusion list happened to name exactly the rules it should have caught.
 
+**A checker that accepts more than its consumers is a panic waiting.** A review
+found that `check` allowed any correctly typed argument while `eval` keyed a
+predicate call from literals and `emit` wrote an action's arguments into text Go
+looks up — so `form-squad(..., cash, ...)` type checked and then hit
+`unreachable!`. The same hole was already open inside the parameter feature
+itself: a parameterised threshold, which is the entire point of `param`, would
+have panicked in `key`.
+
+The fix was to narrow the checker rather than widen the consumers, because the
+narrow rule is the true one: an argument is settled when the doctrine lands.
+Auditing every remaining `unreachable!` the same way then found two more — a
+compound gate, which `static_eval` sent to a function that refuses `and`, and an
+action argument that was static but not literal.
+
+The lesson is not "write fewer assertions". It is that every `unreachable!` is a
+claim about what some *other* module guarantees, and nothing checks that the two
+agree.
+
 **Measure the corpus, not just the result.** `seed_agrees_with_expr` passed while
 six of thirteen rules were always false and therefore untested. Two coverage
 tests now assert that every rule and every conjunct varies, and that each is
@@ -188,7 +207,57 @@ threshold variants no live rule set uses.
 **Inlining repeated data.** Storing a full state on every one of its 13 cases
 made a corpus 21MB. Referencing states by index made it 1.9MB.
 
-## serde_json parsed a doctrine one ULP off
+## Porting CompileDoctrine
+
+Six `.vy` blocks against 2,000 lines of Go, held to 45,635 rules across 532
+doctrines. The corpus needs no recorded game: `CompileDoctrine` is a pure
+function of a `Doctrine`, so the archived doctrines are the whole input.
+
+Every block matched Go on the first or second run. That is not a claim about
+care — it is what the mutation checks are for, and they are the only reason to
+believe any of it.
+
+### A green test on the first run is a reason to be suspicious
+
+Production matched 7,880 rules immediately, which for the hardest block was too
+good. Mutating its savings clauses caught four changes out of five. The fifth —
+moving a gate from `aggression >= 0.3` to `0.4` — changed nothing.
+
+Not one of the 500 archived doctrines has an `Aggression` between 0.3 and 0.4.
+
+### The blocks only test the names they define
+
+Each block's test compares the rules its own file declares, so a rule nobody
+ported would have passed in every block at once, in silence. One test asserts
+the union: all 118 names claimed, each by exactly one block, and nothing emitted
+that Go does not emit.
+
+It found `build-barracks-prereq` unreachable — its gate wants a doctrine with
+air, naval or tech but no vehicles, no infantry and no ground defense, and
+nothing in the corpus is shaped that way. Go never emits it either. Dead in
+both, which the test now states rather than treats as an error.
+
+### Reading ahead beat porting into a wall
+
+Three language additions came from reading the blocks still to be ported rather
+than from hitting them: `max` and `trunc` for the savings arithmetic, `select`
+for a value chosen by a condition, and `def` for the savings stack itself —
+`buildCashCondition` is called from twenty-one rules differing only in a unit
+cost, which written out is about a hundred near-identical `require` lines.
+
+The alternative was finding each at rule sixty, with a diff of several thousand
+rules to read.
+
+### What a hand-port actually gets wrong
+
+The mutations that the acceptance test catches are the mistakes worth designing
+for: a `lerp` bound off by one gave 493 disagreements, a gate threshold off by
+0.1 gave 14 rules emitted that Go does not emit, a wrong `select` condition gave
+235, and a reserve cost off by a credit gave 4,827.
+
+None of them are subtle to make and none are visible by reading.
+
+### serde_json parsed a doctrine one ULP off
 
 Found by the boundary doctrines, and not by finding a porting mistake.
 
@@ -206,7 +275,7 @@ The real doctrines could not have found this. Their values are what an LLM
 emits, and those are round decimals that survive any parser. It took a corpus
 built to straddle thresholds, where a weight is a difference of two others.
 
-## The archived doctrines miss their own thresholds
+### The archived doctrines miss their own thresholds
 
 Not one of the 500 has an `Aggression` between 0.3 and 0.4, so the reserve gated
 on `Aggression < DoctrineSignificant` never changes sides across the whole
@@ -218,7 +287,7 @@ compiler decides. `boundaryDoctrines` sweeps every weight across all six
 thresholds and staggers two of them so the differences the compiler takes are
 non-zero; the same mutation now moves 20 rules.
 
-## Go fuses a multiply-add and Rust does not
+### Go fuses a multiply-add and Rust does not
 
 `lerpf(0.05, 0.15, 0.6)` is 0.11 in Go and 0.10999999999999999 in Rust, from the
 same doubles and the same expression. Go's spec permits contracting
@@ -230,7 +299,7 @@ the same compiler on amd64 need not fuse, so a corpus regenerated there could
 disagree with one generated here. Nothing downstream cares — the two values differ
 by an ulp and both round to the same threshold — but a byte-exact comparison does.
 
-## `%.2f` is not "multiply by 100 and round"
+### `%.2f` is not "multiply by 100 and round"
 
 Go writes squad thresholds into conditions with `%.2f`, so a rounding is part of
 the emitted text and therefore part of the state key. The obvious implementation,

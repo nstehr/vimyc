@@ -19,6 +19,9 @@ param specialist-infantry-first: int
 param siege-vehicle-first: int
 param tech-naval-first: int
 
+def infantry-base() = trunc(select(specialist-infantry-first > 0, 490.0, 500.0))
+def specialist-base() = trunc(select(specialist-infantry-first > 0, 500.0, 490.0))
+
 def reserves(cost: int) =
   cash >= cost
   and (vehicle-weight <= 0.2 or has-role(war-factory) or not has-role(radar) or cash >= cost + 2000)
@@ -94,7 +97,7 @@ rule build-tesla-coil-for-shock-trooper {
 }
 
 rule produce-specialist-infantry {
-  priority trunc(select(specialist-infantry-first > 0, 500.0, 490.0))
+  priority specialist-base()
   category produce-infantry exclusive
   do produce-specialist-infantry
   require specialized-infantry-weight > 0.1
@@ -106,7 +109,7 @@ rule produce-specialist-infantry {
 }
 
 rule produce-infantry {
-  priority trunc(select(specialist-infantry-first > 0, 490.0, 500.0))
+  priority infantry-base()
   category produce-infantry exclusive
   do produce-infantry
   require infantry-weight > 0.1
@@ -119,7 +122,7 @@ rule produce-infantry {
 }
 
 rule produce-infantry-rush {
-  priority trunc(select(specialist-infantry-first > 0, 490.0, 500.0)) + 20
+  priority infantry-base() + 20
   category produce-infantry exclusive
   because "under a rush, cheap rifles have to spawn now rather than behind tech savings"
   do produce-infantry
@@ -134,7 +137,7 @@ rule produce-infantry-rush {
 }
 
 rule produce-bridge-infantry {
-  priority trunc(select(specialist-infantry-first > 0, 490.0, 500.0)) - 5
+  priority infantry-base() - 5
   category produce-infantry exclusive
   because "extra rifles while the doctrine's production buildings are still missing"
   do produce-infantry
@@ -156,7 +159,7 @@ rule produce-bridge-infantry {
 }
 
 rule produce-grenadier {
-  priority trunc(select(specialist-infantry-first > 0, 490.0, 500.0)) - 2
+  priority infantry-base() - 2
   category produce-infantry exclusive
   do produce-grenadier
   require infantry-weight > 0.2
@@ -181,7 +184,7 @@ rule build-kennel {
 }
 
 rule produce-attack-dog {
-  priority trunc(select(specialist-infantry-first > 0, 490.0, 500.0)) + 10
+  priority infantry-base() + 10
   category produce-infantry exclusive
   because "the first dog out of the kennel is the scout, so it outranks rifles until the cap"
   do produce-attack-dog
