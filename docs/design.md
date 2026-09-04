@@ -364,6 +364,24 @@ Priorities are the one thing that must be folded per doctrine either way, since
 the engine sorts on them. Deferring this choice is most of the reason to put
 parameters in the language rather than to keep templating rule text in Go.
 
+### Arguments are static too
+
+A priority is not the only static position. An argument to a predicate or an
+action is settled when the doctrine lands, for a reason that comes from Go
+rather than from taste: `eval` keys a recorded call by its arguments, and Go's
+projection builds those keys from the literals in the source. An argument that
+varies per tick has no key to look up. An action's arguments are worse still —
+Go finds the function by the text `form-squad(ground-attack, Ground, 8, Attack)`.
+
+So the checker checks arguments in `Phase::Static`, and `form-squad(..., cash,
+...)` is rejected. Static rather than *literal*, because the whole point is that
+`form-squad(..., ground-attack-group-size, ...)` works: an argument may be any
+arithmetic over parameters and `lerp`, and it is folded to a number before it
+reaches a key or the emitted text.
+
+A `let` binding is not static, so it cannot be an argument. Nothing in the corpus
+does that, and allowing it would mean carrying the rule scope into the fold.
+
 ### Specialising, and why a gate must not survive folding
 
 Folding alone turns a gate into a constant comparison rather than removing the

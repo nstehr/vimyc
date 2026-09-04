@@ -55,7 +55,9 @@ struct Checker {
 /// convention — see `docs/design.md`, "Two phases".
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Phase {
-    Static,
+    /// Carries what is being checked, so the diagnostic can name it: a priority
+    /// and an argument are static for different reasons.
+    Static(&'static str),
     Tick,
 }
 
@@ -188,7 +190,7 @@ impl<'a> RuleChecker<'a> {
         // Restored unconditionally: `rule` checks the priority before the
         // bindings and requires, so a leaked `Static` would reject every
         // predicate in the rest of the rule.
-        self.phase = Phase::Static;
+        self.phase = Phase::Static("a priority");
         self.check_expr(e, &Type::Int);
         self.phase = Phase::Tick;
     }
@@ -272,8 +274,8 @@ impl<'a> RuleChecker<'a> {
             ExprKind::Error => Type::Error,
             ExprKind::Call(n, args) => {
                 if n.text == env::COUNT {
-                    if self.phase == Phase::Static {
-                        return self.not_in_a_priority(&n.text, n.span);
+                    if let Phase::Static(what) = self.phase {
+                        return self.not_static(what, &n.text, n.span);
                     }
                     self.count(args, n.span)
                 } else if let Some(sig) = env::builtin(&n.text) {
@@ -281,8 +283,8 @@ impl<'a> RuleChecker<'a> {
                     // the whole reason it is not a predicate.
                     self.call(&n.text, n.span, args, sig.params, &sig.ret)
                 } else if let Some(sig) = env::predicate(&n.text) {
-                    if self.phase == Phase::Static {
-                        return self.not_in_a_priority(&n.text, n.span);
+                    if let Phase::Static(what) = self.phase {
+                        return self.not_static(what, &n.text, n.span);
                     }
                     self.call(&n.text, n.span, args, sig.params, &sig.ret)
                 } else {
@@ -433,14 +435,21 @@ impl<'a> RuleChecker<'a> {
             }
             return;
         };
+        // A numeric argument belongs to the static phase. `eval` keys a
+        // predicate call by its arguments and `emit` writes an action's into
+        // text Go looks up, so neither can wait for a tick to learn what one is.
+        // Parameters and `lerp` are the point of allowing more than a literal.
+        let outer = self.phase;
+        self.phase = Phase::Static("an argument");
         self.check_expr(e, t);
+        self.phase = outer;
     }
 
     /// A bare name: a `let` binding, a zero-argument predicate, or a collection.
     fn ident(&mut self, name: &str, span: Span) -> Type {
         // No bindings exist in the static phase: a priority is checked before
         // the rule's `let`s, precisely because it may not see them.
-        if self.phase == Phase::Tick
+        if matches!(self.phase, Phase::Tick)
             && let Some((_, ty)) = self.scope.iter().find(|(n, _)| n == name)
         {
             return ty.clone();
@@ -451,8 +460,8 @@ impl<'a> RuleChecker<'a> {
         }
 
         if let Some(sig) = env::predicate(name) {
-            if self.phase == Phase::Static {
-                return self.not_in_a_priority(name, span);
+            if let Phase::Static(what) = self.phase {
+                return self.not_static(what, name, span);
             }
             if sig.params.is_empty() {
                 return sig.ret.clone();
@@ -518,9 +527,8 @@ impl<'a> RuleChecker<'a> {
     }
 
     /// Reading game state where only a doctrine is available.
-    fn not_in_a_priority(&mut self, name: &str, span: Span) -> Type {
-        let msg =
-            format!("a priority is fixed when the doctrine lands, so it cannot read `{name}`");
+    fn not_static(&mut self, what: &str, name: &str, span: Span) -> Type {
+        let msg = format!("{what} is fixed when the doctrine lands, so it cannot read `{name}`");
         self.error(span, msg);
         Type::Error
     }
@@ -964,5 +972,55 @@ mod tests {
         let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/rules/params.vy"))
             .expect("params.vy");
         assert!(messages(&src).is_empty());
+    }
+
+    /// An argument is settled when the doctrine lands, not during a tick.
+    ///
+    /// `eval` keys a predicate call by its arguments and `emit` writes an
+    /// action's into text Go looks up; neither can wait for the game to answer.
+    #[test]
+    fn an_argument_cannot_read_game_state() {
+        // A predicate's numeric argument.
+        let e = messages(&param_src("", "1", "count(damaged-combat-units(cash)) > 0"));
+        assert!(
+            e.iter().any(|m| m.contains("an argument is fixed")),
+            "{e:?}"
+        );
+
+        // An action's.
+        let src = "rule r {\n priority 1\n category squad-form\n \
+                   do form-squad(ground-attack, Ground, cash, Attack)\n \
+                   require cash >= 1\n}\n";
+        let e = messages(src);
+        assert!(
+            e.iter().any(|m| m.contains("an argument is fixed")),
+            "{e:?}"
+        );
+
+        // A binding is not static either, even when its value would be.
+        let src = "rule r {\n priority 1\n category micro\n \
+                   do retreat-damaged-units(0.5)\n let t = 0.5\n \
+                   require count(damaged-combat-units(t)) > 0\n}\n";
+        let e = messages(src);
+        assert!(e.iter().any(|m| m.contains("unknown name `t`")), "{e:?}");
+    }
+
+    /// Arithmetic and parameters are fine, which is the reason the rule is
+    /// "static" rather than "a literal".
+    #[test]
+    fn an_argument_may_be_computed_from_a_doctrine() {
+        let e = messages(&param_src(
+            "param leash: float\n",
+            "1",
+            "count(overextended-squad-members(ground-attack, leash)) > 0",
+        ));
+        assert!(e.is_empty(), "{e:?}");
+
+        let e = messages(&param_src(
+            "",
+            "1",
+            "count(damaged-combat-units(0.25 + 0.25)) > 0",
+        ));
+        assert!(e.is_empty(), "{e:?}");
     }
 }

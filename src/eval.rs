@@ -209,12 +209,14 @@ impl<'a> Evaluator<'a> {
         let st = self.state;
         match id {
             Predicate::AircraftCapacity => Value::Int(st.scalar("aircraft-capacity") as i64),
-            Predicate::AxisBurned => Value::Bool(st.call_bool(&key("axis-burned", args))),
+            Predicate::AxisBurned => {
+                Value::Bool(st.call_bool(&key("axis-burned", args, self.params)))
+            }
             Predicate::BaseUnderAttack => Value::Bool(st.flag("base-under-attack")),
             Predicate::BestAirTarget => Value::Opt(st.is_present("best-air-target")),
             Predicate::BestGroundTarget => Value::Opt(st.is_present("best-ground-target")),
             Predicate::BuildingCount => Value::Int(st.type_count(arg_name(&args[0]))),
-            Predicate::CanBuild => Value::Bool(st.call_bool(&key("can-build", args))),
+            Predicate::CanBuild => Value::Bool(st.call_bool(&key("can-build", args, self.params))),
             Predicate::CanBuildAnyCombatAircraft => {
                 Value::Bool(st.flag("can-build-any-combat-aircraft"))
             }
@@ -222,7 +224,9 @@ impl<'a> Evaluator<'a> {
                 Value::Bool(st.flag("can-build-any-combat-vehicle"))
             }
             Predicate::CanBuildAnySpecialist => Value::Bool(st.flag("can-build-any-specialist")),
-            Predicate::CanBuildRole => Value::Bool(st.call_bool(&key("can-build-role", args))),
+            Predicate::CanBuildRole => {
+                Value::Bool(st.call_bool(&key("can-build-role", args, self.params)))
+            }
             Predicate::CanBuildTransport => Value::Bool(st.flag("can-build-transport")),
             Predicate::CapturableCount => Value::Int(st.scalar("capturable-count") as i64),
             Predicate::Cash => Value::Int(st.scalar("cash") as i64),
@@ -233,17 +237,17 @@ impl<'a> Evaluator<'a> {
             }
             Predicate::DamagedBuildings => Value::Int(st.collection("damaged-buildings")),
             Predicate::DamagedCombatUnits => {
-                Value::Int(st.collection(&key("damaged-combat-units", args)))
+                Value::Int(st.collection(&key("damaged-combat-units", args, self.params)))
             }
             Predicate::EnemiesVisible => Value::Bool(st.flag("enemies-visible")),
             Predicate::EngineerNearCapturable => Value::Bool(st.flag("engineer-near-capturable")),
             Predicate::HarvestersInDanger => {
-                Value::Int(st.collection(&key("harvesters-in-danger", args)))
+                Value::Int(st.collection(&key("harvesters-in-danger", args, self.params)))
             }
             Predicate::HasBuilding => Value::Bool(st.type_count(arg_name(&args[0])) > 0),
             Predicate::HasEnemyIntel => Value::Bool(st.flag("has-enemy-intel")),
             Predicate::HasRetreatingUnits => Value::Bool(st.flag("has-retreating-units")),
-            Predicate::HasRole => Value::Bool(st.call_bool(&key("has-role", args))),
+            Predicate::HasRole => Value::Bool(st.call_bool(&key("has-role", args, self.params))),
             Predicate::HasScout => Value::Bool(st.flag("has-scout")),
             Predicate::HasUnit => Value::Bool(st.type_count(arg_name(&args[0])) > 0),
             Predicate::IdleCombatAircraft => Value::Int(st.collection("idle-combat-aircraft")),
@@ -260,40 +264,48 @@ impl<'a> Evaluator<'a> {
             Predicate::IdleNavalUnits => Value::Int(st.collection("idle-naval-units")),
             Predicate::IdleScouts => Value::Int(st.collection("idle-scouts")),
             Predicate::IsRushed => Value::Bool(st.flag("is-rushed")),
-            Predicate::LostRole => Value::Bool(st.call_bool(&key("lost-role", args))),
+            Predicate::LostRole => Value::Bool(st.call_bool(&key("lost-role", args, self.params))),
             Predicate::MapHasWater => Value::Bool(st.flag("map-has-water")),
             Predicate::NearBaseGroundUnits => Value::Int(st.collection("near-base-ground-units")),
             Predicate::NearestEnemy => Value::Opt(st.is_present("nearest-enemy")),
             Predicate::OverextendedSquadMembers => {
-                Value::Int(st.collection(&key("overextended-squad-members", args)))
+                Value::Int(st.collection(&key("overextended-squad-members", args, self.params)))
             }
             Predicate::PowerExcess => Value::Int(st.scalar("power-excess") as i64),
-            Predicate::QueueBusy => Value::Bool(st.call_bool(&key("queue-busy", args))),
-            Predicate::QueueProducingRole => {
-                Value::Bool(st.call_bool(&key("queue-producing-role", args)))
+            Predicate::QueueBusy => {
+                Value::Bool(st.call_bool(&key("queue-busy", args, self.params)))
             }
-            Predicate::QueueReady => Value::Bool(st.call_bool(&key("queue-ready", args))),
+            Predicate::QueueProducingRole => {
+                Value::Bool(st.call_bool(&key("queue-producing-role", args, self.params)))
+            }
+            Predicate::QueueReady => {
+                Value::Bool(st.call_bool(&key("queue-ready", args, self.params)))
+            }
             Predicate::ResourcesNearCap => Value::Bool(st.flag("resources-near-cap")),
-            Predicate::RoleCount => Value::Int(st.call_int(&key("role-count", args))),
+            Predicate::RoleCount => Value::Int(st.call_int(&key("role-count", args, self.params))),
             Predicate::SpecialistInfantryCount => {
                 Value::Int(st.scalar("specialist-infantry-count") as i64)
             }
             Predicate::SquadAwayFromBase => {
-                Value::Bool(st.call_bool(&key("squad-away-from-base", args)))
+                Value::Bool(st.call_bool(&key("squad-away-from-base", args, self.params)))
             }
-            Predicate::SquadExists => Value::Bool(st.call_bool(&key("squad-exists", args))),
-            Predicate::SquadIdleCount => Value::Int(st.call_int(&key("squad-idle-count", args))),
+            Predicate::SquadExists => {
+                Value::Bool(st.call_bool(&key("squad-exists", args, self.params)))
+            }
+            Predicate::SquadIdleCount => {
+                Value::Int(st.call_int(&key("squad-idle-count", args, self.params)))
+            }
             Predicate::SquadNeedsReinforcement => {
-                Value::Bool(st.call_bool(&key("squad-needs-reinforcement", args)))
+                Value::Bool(st.call_bool(&key("squad-needs-reinforcement", args, self.params)))
             }
             Predicate::SquadReadyRatio => {
-                Value::Float(st.call_float(&key("squad-ready-ratio", args)))
+                Value::Float(st.call_float(&key("squad-ready-ratio", args, self.params)))
             }
             Predicate::SquadThreatRatio => {
-                Value::Float(st.call_float(&key("squad-threat-ratio", args)))
+                Value::Float(st.call_float(&key("squad-threat-ratio", args, self.params)))
             }
             Predicate::SupportPowerReady => {
-                Value::Bool(st.call_bool(&key("support-power-ready", args)))
+                Value::Bool(st.call_bool(&key("support-power-ready", args, self.params)))
             }
             Predicate::TransportCount => Value::Int(st.scalar("transport-count") as i64),
             Predicate::UnassignedIdleAir => Value::Int(st.collection("unassigned-idle-air")),
@@ -318,6 +330,21 @@ fn binary(op: BinOp, l: Value, r: Value) -> Value {
             BinOp::NotEq => Value::Bool(a != b),
             other => unreachable!("{other:?} on bools"),
         };
+    }
+
+    // Compared as integers when both are, because f64 cannot tell
+    // 9007199254740992 from 9007199254740993 and Go's expr can.
+    if let (Value::Int(a), Value::Int(b)) = (l, r) {
+        match op {
+            BinOp::Eq => return Value::Bool(a == b),
+            BinOp::NotEq => return Value::Bool(a != b),
+            BinOp::Lt => return Value::Bool(a < b),
+            BinOp::LtEq => return Value::Bool(a <= b),
+            BinOp::Gt => return Value::Bool(a > b),
+            BinOp::GtEq => return Value::Bool(a >= b),
+            // Arithmetic falls through to the integer path below.
+            _ => {}
+        }
     }
 
     let (a, b) = (as_f64(l), as_f64(r));
@@ -358,7 +385,9 @@ fn unary(op: UnOp, v: Value) -> Value {
     match op {
         UnOp::Not => Value::Bool(!expect_bool(v)),
         UnOp::Neg => match v {
-            Value::Int(n) => Value::Int(-n),
+            // Saturating like the arithmetic: negating i64::MIN would otherwise
+            // panic in debug and wrap in release.
+            Value::Int(n) => Value::Int(n.saturating_neg()),
             Value::Float(f) => Value::Float(-f),
             other => unreachable!("cannot negate {other:?}"),
         },
@@ -371,14 +400,19 @@ fn unary(op: UnOp, v: Value) -> Value {
 
 /// The state key a call is recorded under. Arguments in enum positions are
 /// literal names; numeric ones are rendered so a float argument keys distinctly.
-fn key(name: &str, args: &[IrExpr]) -> String {
+fn key(name: &str, args: &[IrExpr], params: &ParamValues) -> String {
     let rendered: Vec<String> = args
         .iter()
         .map(|a| match &a.kind {
             IrExprKind::Member(d, i) => env::member_name(*d, *i).to_string(),
-            IrExprKind::Int(n) => n.to_string(),
-            IrExprKind::Float(f) => crate::state::render_number(*f),
-            other => unreachable!("unexpected argument {other:?}"),
+            // Folded, not read literally: an argument is static but need not be
+            // a literal — a doctrine's `leash` is a parameter, and the key has
+            // to be the number it stands for.
+            _ => match static_eval(a, params) {
+                Value::Int(n) => n.to_string(),
+                Value::Float(f) => crate::state::render_number(f),
+                other => unreachable!("argument folded to {other:?}"),
+            },
         })
         .collect();
     crate::state::call_key(name, &rendered)
@@ -540,5 +574,70 @@ mod tests {
         // Saturating rather than overflowing, and identical in debug and release.
         let st = state(&[("scalar", "cash=9223372036854775807")]);
         assert_eq!(fired(&rule("cash * cash > 0"), &st), vec!["r"]);
+    }
+
+    /// f64 cannot tell 2^53 from 2^53 + 1, and Go's expr compares int64s.
+    #[test]
+    fn large_integers_compare_exactly() {
+        let cases = [
+            ("9007199254740992 == 9007199254740993", false),
+            ("9007199254740992 != 9007199254740993", true),
+            ("9007199254740992 < 9007199254740993", true),
+            ("9007199254740993 <= 9007199254740992", false),
+        ];
+        for (require, want) in cases {
+            let src = format!(
+                "rule r {{\n priority 1\n category economy\n do scout\n \
+                 require {require}\n}}\n"
+            );
+            let (t, _) = lex(&src);
+            let (a, d) = parse(&t);
+            assert!(d.is_empty(), "{d:?}");
+            let ir = crate::lower::lower(&a);
+            let fired = !fired(&ir, &state(&[])).is_empty();
+            assert_eq!(fired, want, "{require}");
+        }
+    }
+
+    /// `-i64::MIN` has no representation, and the surrounding arithmetic is all
+    /// saturating rather than panicking.
+    #[test]
+    fn negating_the_smallest_integer_saturates() {
+        let src = "rule r {\n priority 1\n category economy\n do scout\n \
+                   require -(-9223372036854775807 - 1) > 0\n}\n";
+        let (t, _) = lex(src);
+        let (a, d) = parse(&t);
+        assert!(d.is_empty(), "{d:?}");
+        assert_eq!(fired(&crate::lower::lower(&a), &state(&[])), vec!["r"]);
+    }
+
+    /// A predicate call is keyed by its arguments, and a doctrine's number has
+    /// to reach that key as the number rather than as the parameter.
+    #[test]
+    fn a_parameterised_argument_keys_the_call() {
+        let src = "param leash: float\n\
+                   rule r {\n priority 1\n category micro\n \
+                   do recall-overextended(ground-attack, leash)\n \
+                   require count(overextended-squad-members(ground-attack, leash)) > 0\n}\n";
+        let (t, ld) = lex(src);
+        assert!(ld.is_empty(), "{ld:?}");
+        let (a, d) = parse(&t);
+        assert!(d.is_empty(), "{d:?}");
+        let ir = crate::check::check(&a).expect("checks").ir;
+        let params = ParamValues::bind(
+            &ir,
+            &std::collections::HashMap::from([("leash".to_string(), 0.36)]),
+        )
+        .expect("binds");
+
+        let st = state(&[("coll", "overextended-squad-members(ground-attack,0.36)=2")]);
+        assert_eq!(
+            evaluate(&ir, &params, &st)
+                .fired
+                .into_iter()
+                .map(|r| r.name.clone())
+                .collect::<Vec<_>>(),
+            vec!["r"]
+        );
     }
 }

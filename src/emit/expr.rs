@@ -48,6 +48,22 @@ fn emit_rule(rule: &IrRule, params: &ParamValues) -> RuleSource {
     }
 }
 
+/// A predicate's argument.
+///
+/// Folded rather than emitted as an expression: an argument is static by the
+/// checker's rule, and Go keys a recorded call by the literal in its source — so
+/// `DamagedCombatUnits(0.5)` is what the projection can answer and
+/// `DamagedCombatUnits((0.25 + 0.25))` is not.
+fn emit_arg(e: &IrExpr, rule: &IrRule, params: &ParamValues, out: &mut String) {
+    match &e.kind {
+        IrExprKind::Member(..) => emit_expr(e, rule, params, PREC_ATOM, out),
+        _ if crate::specialise::is_static(e) => out.push_str(&fold(e, params)),
+        // A collection argument to `count`, which lowering has already folded
+        // into the predicate itself, so nothing else should reach here.
+        _ => emit_expr(e, rule, params, PREC_ATOM, out),
+    }
+}
+
 /// A parameter or builtin, resolved to the number the doctrine gives it.
 ///
 /// Reuses the priority evaluator, so a folded threshold and a folded priority
@@ -173,7 +189,7 @@ fn emit_expr(e: &IrExpr, rule: &IrRule, params: &ParamValues, parent: u8, out: &
                 if i > 0 {
                     out.push(',');
                 }
-                emit_expr(a, rule, params, PREC_ATOM, out);
+                emit_arg(a, rule, params, out);
             }
             out.push(')');
             if collection {

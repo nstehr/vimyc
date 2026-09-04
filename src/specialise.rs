@@ -54,7 +54,7 @@ pub fn specialise(ir: &mut Ir, params: &ParamValues) {
 /// A binding counts as non-static even when its value is. `let` is rule-scoped
 /// and resolving one here would mean carrying the scope through the walk, for a
 /// case no real rule set has: a doctrine gate written through a binding.
-fn is_static(e: &IrExpr) -> bool {
+pub(crate) fn is_static(e: &IrExpr) -> bool {
     match &e.kind {
         IrExprKind::Int(_) | IrExprKind::Float(_) | IrExprKind::Param(_) => true,
         IrExprKind::Predicate(..) | IrExprKind::Member(..) | IrExprKind::Binding(_) => false,

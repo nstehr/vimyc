@@ -60,12 +60,20 @@ impl ParamValues {
                 return Err(format!("no value for parameter `{}`", p.name));
             };
             values.push(match p.kind {
+                ParamKind::Float if !n.is_finite() => {
+                    return Err(format!("parameter `{}` is not a number: {n}", p.name));
+                }
                 ParamKind::Float => ParamValue::Float(n),
                 // Rejected rather than rounded: `lerp(200, 400, 0.5)` and a
                 // group size of 7.5 are different kinds of mistake, and only one
                 // of them is the caller's intent.
                 ParamKind::Int if n.fract() != 0.0 => {
                     return Err(format!("parameter `{}` is an int, got {n}", p.name));
+                }
+                // `as` saturates rather than failing, so an out-of-range value
+                // would silently become i64::MAX.
+                ParamKind::Int if !n.is_finite() || n < i64::MIN as f64 || n > i64::MAX as f64 => {
+                    return Err(format!("parameter `{}` is out of range: {n}", p.name));
                 }
                 ParamKind::Int => ParamValue::Int(n as i64),
             });
@@ -183,6 +191,28 @@ mod tests {
         .expect("binds");
         // Supplied in the other order on purpose: the map does not decide slots.
         assert_eq!(v.values, vec![ParamValue::Float(0.5), ParamValue::Int(8)]);
+    }
+
+    /// `as i64` saturates rather than failing, so an out-of-range value would
+    /// silently arrive as i64::MAX.
+    #[test]
+    fn a_number_an_int_cannot_hold_is_rejected() {
+        let ir = decls();
+        for bad in [1e30, -1e30, f64::INFINITY, f64::NAN] {
+            let supplied = HashMap::from([("aggression".into(), 0.5), ("size".into(), bad)]);
+            let err = ParamValues::bind(&ir, &supplied).unwrap_err();
+            assert!(
+                err.contains("out of range") || err.contains("is an int"),
+                "{bad}: {err}"
+            );
+        }
+        // A float parameter has its own hole: not every f64 is a number.
+        let supplied = HashMap::from([("aggression".into(), f64::NAN), ("size".into(), 8.0)]);
+        assert!(
+            ParamValues::bind(&ir, &supplied)
+                .unwrap_err()
+                .contains("not a number")
+        );
     }
 
     #[test]

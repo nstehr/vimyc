@@ -16,23 +16,42 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let mut args: Vec<String> = env::args().skip(1).collect();
-    // Emitting is silent on stdout apart from the artifact, so it can be
-    // redirected straight into a generated file.
-    let emit_json = args.iter().any(|a| a == "--json");
-    args.retain(|a| a != "--json");
-    // `--params doctrine.json`, a flat object of name to number.
-    let params_path = args
-        .iter()
-        .position(|a| a == "--params")
-        .map(|i| args.remove(i + 1));
-    args.retain(|a| a != "--params");
+    const USAGE: &str = "usage: vimyc <file> [state.json] [--json] [--params <file>]";
 
-    let mut args = args.into_iter();
-    let Some(path) = args.next() else {
-        return Err("no input file (usage: vimyc <file> [state.json] [--json])".into());
+    // Explicit rather than scanning for flags: `--params` with nothing after it
+    // used to index past the end, and stray positional arguments were dropped
+    // without a word.
+    let mut emit_json = false;
+    let mut params_path: Option<String> = None;
+    let mut positional: Vec<String> = Vec::new();
+    let mut args = env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            // Emitting is silent on stdout apart from the artifact, so it can be
+            // redirected straight into a generated file.
+            "--json" => emit_json = true,
+            // A flat object of parameter name to number.
+            "--params" => {
+                params_path = Some(
+                    args.next()
+                        .ok_or(format!("--params needs a file\n{USAGE}"))?,
+                )
+            }
+            _ if arg.starts_with("--") => {
+                return Err(format!("unknown flag `{arg}`\n{USAGE}").into());
+            }
+            _ => positional.push(arg),
+        }
+    }
+
+    let mut positional = positional.into_iter();
+    let Some(path) = positional.next() else {
+        return Err(format!("no input file\n{USAGE}").into());
     };
-    let state_path = args.next();
+    let state_path = positional.next();
+    if let Some(extra) = positional.next() {
+        return Err(format!("unexpected argument `{extra}`\n{USAGE}").into());
+    }
 
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
     let src = SourceFile::new(path, text);
