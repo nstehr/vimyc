@@ -6,7 +6,7 @@
 //! trait would also abstract the wrong thing, since the emitters share almost no
 //! interface; what they share is the resolution `lower` already did.
 
-use crate::ir::Ir;
+use crate::ir::{Ir, ParamValues};
 
 pub mod expr;
 
@@ -38,8 +38,10 @@ pub struct RuleSource {
     pub condition: String,
 }
 
-pub fn emit(ir: &Ir, target: Target) -> Artifact {
+/// `params` supplies the doctrine's numbers. An unparameterised rule set takes
+/// an empty set, which is what every rule set does today.
+pub fn emit(ir: &Ir, params: &ParamValues, target: Target) -> Artifact {
     match target {
-        Target::Expr => Artifact::Expr(expr::emit(ir)),
+        Target::Expr => Artifact::Expr(expr::emit(ir, params)),
     }
 }

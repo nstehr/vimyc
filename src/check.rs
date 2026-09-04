@@ -43,6 +43,9 @@ pub fn check(ast: &Ast) -> Result<Checked, Vec<Diagnostic>> {
 /// instead, so it cannot outlive the rule it belongs to.
 struct Checker {
     diags: Vec<Diagnostic>,
+    /// Declared parameters, by name. File-scoped, so unlike a `let` this lives
+    /// on the whole-set checker rather than on `RuleChecker`.
+    params: Vec<(String, Type)>,
 }
 
 /// One rule's checking pass.
@@ -54,29 +57,52 @@ struct RuleChecker<'a> {
     diags: &'a mut Vec<Diagnostic>,
     /// A `Vec` because there are no nested scopes and a handful of bindings.
     scope: Vec<(String, Type)>,
+    /// Borrowed from `Checker`: parameters outlive every rule.
+    #[allow(dead_code, reason = "read once `priority` and `ident` resolve params")]
+    params: &'a [(String, Type)],
 }
 
 impl Checker {
     fn new() -> Self {
-        Checker { diags: Vec::new() }
+        Checker {
+            diags: Vec::new(),
+            params: Vec::new(),
+        }
     }
 
     fn run(&mut self, ast: &Ast) {
+        // Before any rule, since every rule may refer to them.
+        self.declare_params(&ast.params);
+
         for rule in &ast.rules {
             RuleChecker {
                 diags: &mut self.diags,
                 scope: Vec::new(),
+                params: &self.params,
             }
             .rule(rule);
         }
         self.check_priority_collisions(ast);
         self.check_shadowed_rules(ast);
     }
+
+    /// Records the declared parameters, rejecting duplicates and any name that
+    /// would shadow a predicate or a builtin.
+    fn declare_params(&mut self, params: &[crate::ast::Param]) {
+        if params.is_empty() {
+            return;
+        }
+        todo!("record each param's type; reject duplicates and predicate names")
+    }
 }
 
 impl<'a> RuleChecker<'a> {
     fn rule(&mut self, rule: &Rule) {
         self.scope.clear();
+
+        // Checked before the bindings: a priority is resolved once per doctrine,
+        // so it may see parameters but not `let`s and not game state.
+        self.priority(&rule.priority);
 
         for binding in &rule.lets {
             let ty = self.synth(&binding.value);
@@ -95,6 +121,19 @@ impl<'a> RuleChecker<'a> {
             self.error(rule.category.span, msg);
         }
         self.action(&rule.action);
+    }
+
+    /// A priority must be an `Int` decidable before the first tick.
+    ///
+    /// Parameters, literals and `lerp` are in; a predicate is not. That is what
+    /// separates the two phases, and it is a type error rather than a
+    /// convention — see `docs/design.md`.
+    fn priority(&mut self, e: &Expr) {
+        // A bare number is trivially static and trivially `Int`.
+        if matches!(e.kind, ExprKind::Int(_)) {
+            return;
+        }
+        todo!("synthesise `e` with predicates rejected, then check it is Int")
     }
 
     /// An action name, and its arguments when it takes any.
@@ -443,6 +482,7 @@ impl Checker {
 
     /// Two rules sharing a category and a priority.
     ///
+    ///
     /// Go sorts by priority with `sort.Slice`, which is not stable, so equal
     /// priorities order arbitrarily. Within a category that decides which of the
     /// two an exclusive rule blocks — a coin flip that can land differently
@@ -450,10 +490,15 @@ impl Checker {
     fn check_priority_collisions(&mut self, ast: &Ast) {
         for (i, a) in ast.rules.iter().enumerate() {
             for b in &ast.rules[i + 1..] {
-                if a.priority == b.priority && a.category.text == b.category.text {
+                let (Some(pa), Some(pb)) =
+                    (literal_priority(&a.priority), literal_priority(&b.priority))
+                else {
+                    continue;
+                };
+                if pa == pb && a.category.text == b.category.text {
                     let msg = format!(
                         "`{}` and `{}` share priority {} in category `{}`, so their order is undefined",
-                        a.name.text, b.name.text, a.priority, a.category.text
+                        a.name.text, b.name.text, pa, a.category.text
                     );
                     self.diags.push(Diagnostic::warning(b.name.span, msg));
                 }
@@ -474,11 +519,16 @@ impl Checker {
         // file.
         for (i, lower) in ast.rules.iter().enumerate() {
             for (j, higher) in ast.rules.iter().enumerate() {
-                if i == j
-                    || !higher.exclusive
-                    || higher.category.text != lower.category.text
-                    || higher.priority <= lower.priority
-                {
+                if i == j || !higher.exclusive || higher.category.text != lower.category.text {
+                    continue;
+                }
+                let (Some(hp), Some(lp)) = (
+                    literal_priority(&higher.priority),
+                    literal_priority(&lower.priority),
+                ) else {
+                    continue;
+                };
+                if hp <= lp {
                     continue;
                 }
                 let covered = higher
@@ -494,6 +544,20 @@ impl Checker {
                 }
             }
         }
+    }
+}
+
+/// A priority that is already a number.
+///
+/// Both whole-set passes compare priorities, and once a doctrine can set one
+/// there may be no number to compare until the parameters arrive. Rather than
+/// guess, they skip any pair that is not literal on both sides — so a
+/// parameterised rule set gets these checks at resolve time or not at all.
+/// `docs/design.md` covers why priority is the one field with two phases.
+fn literal_priority(e: &Expr) -> Option<i64> {
+    match e.kind {
+        ExprKind::Int(n) => Some(n),
+        _ => None,
     }
 }
 

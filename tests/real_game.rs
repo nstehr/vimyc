@@ -11,6 +11,10 @@
 //! comparison, which no amount of matching on names or recorded state can see.
 
 use serde::Deserialize;
+use vimyc::ir::ParamValues;
+
+/// No rule set carries parameters yet, so every call site passes an empty set.
+const NO_PARAMS: ParamValues = ParamValues { values: Vec::new() };
 
 #[derive(Debug, Deserialize)]
 struct RealCorpus {
@@ -141,7 +145,7 @@ fn agrees_with_a_real_game() {
             panic!("rule set {} has no `{}`", case.rule_set, case.rule);
         };
 
-        let got = vimyc::eval::rule_fires(rule, &c.states[case.state]);
+        let got = vimyc::eval::rule_fires(rule, &NO_PARAMS, &c.states[case.state]);
         checked += 1;
         if got != case.fired {
             mismatches.push(format!(
@@ -199,7 +203,7 @@ fn emitted_expr_round_trips_on_a_real_game() {
     for (i, src) in c.rule_sets.iter().enumerate() {
         let lowered = ir(src, i);
         let vimyc::emit::Artifact::Expr(emitted) =
-            vimyc::emit::emit(&lowered, vimyc::emit::Target::Expr);
+            vimyc::emit::emit(&lowered, &NO_PARAMS, vimyc::emit::Target::Expr);
 
         for rule in &emitted {
             let Some(want) = c.conditions[i].get(&rule.name) else {

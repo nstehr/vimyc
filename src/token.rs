@@ -35,6 +35,11 @@ pub enum TokenKind {
     Or,
     Not,
     Exists,
+    Param,
+    /// The type in a parameter declaration. Named apart from `Int`/`Float`,
+    /// which are literals.
+    IntType,
+    FloatType,
 
     // punctuation
     LParen,
@@ -42,6 +47,7 @@ pub enum TokenKind {
     LBrace,
     RBrace,
     Comma,
+    Colon,
 
     // arithmetic
     Plus,
@@ -79,6 +85,9 @@ impl TokenKind {
             "or" => TokenKind::Or,
             "not" => TokenKind::Not,
             "exists" => TokenKind::Exists,
+            "param" => TokenKind::Param,
+            "int" => TokenKind::IntType,
+            "float" => TokenKind::FloatType,
             _ => return None,
         })
     }

@@ -8,7 +8,25 @@ use crate::diag::Span;
 
 #[derive(Debug)]
 pub struct Ast {
+    /// Doctrine inputs, file-scoped and constant within a doctrine window.
+    pub params: Vec<Param>,
     pub rules: Vec<Rule>,
+}
+
+/// A `param` declaration.
+#[derive(Debug)]
+pub struct Param {
+    pub name: Name,
+    pub kind: ParamKind,
+    pub span: Span,
+}
+
+/// What a parameter holds. Numbers only — the `[]string` preferences a doctrine
+/// also carries are consumed by `SetPreferences`, never by a rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamKind {
+    Int,
+    Float,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,7 +38,9 @@ pub struct Name {
 #[derive(Debug)]
 pub struct Rule {
     pub name: Name,
-    pub priority: i64,
+    /// An expression so a doctrine can set it, restricted by the checker to
+    /// parameters, literals and `lerp` — see `docs/design.md`.
+    pub priority: Expr,
     pub category: Name,
     /// A modifier on `category`; absent means false.
     pub exclusive: bool,

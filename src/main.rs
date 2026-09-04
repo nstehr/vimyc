@@ -58,9 +58,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
     report(&src, &checked.warnings);
 
+    // No way to supply a doctrine's numbers from the CLI yet. Refused rather
+    // than defaulted: a wrong threshold is worse than a missing one.
+    let params = vimyc::ir::ParamValues::default();
+    if !checked.ir.params.is_empty() {
+        return Err(format!(
+            "{} declares parameters, which this CLI cannot supply yet",
+            checked.ir.params.len()
+        )
+        .into());
+    }
+
     if emit_json {
         let vimyc::emit::Artifact::Expr(rules) =
-            vimyc::emit::emit(&checked.ir, vimyc::emit::Target::Expr);
+            vimyc::emit::emit(&checked.ir, &params, vimyc::emit::Target::Expr);
         println!("{}", serde_json::to_string_pretty(&rules)?);
         return Ok(());
     }
@@ -69,10 +80,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         let json =
             std::fs::read_to_string(&state_path).map_err(|e| format!("{state_path}: {e}"))?;
         let state: State = serde_json::from_str(&json).map_err(|e| format!("{state_path}: {e}"))?;
-        for rule in evaluate(&checked.ir, &state).fired {
+        for rule in evaluate(&checked.ir, &params, &state).fired {
             println!(
                 "{:>5}  {:<20} {}",
-                rule.priority,
+                vimyc::eval::priority(rule, &params),
                 vimyc::env::category_name(rule.category.0),
                 rule.name
             );

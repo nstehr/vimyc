@@ -79,6 +79,7 @@ impl<'a> Lexer<'a> {
             b'{' => self.single(TokenKind::LBrace),
             b'}' => self.single(TokenKind::RBrace),
             b',' => self.single(TokenKind::Comma),
+            b':' => self.single(TokenKind::Colon),
             b'+' => self.single(TokenKind::Plus),
             b'*' => self.single(TokenKind::Asterisk),
             b'/' => self.single(TokenKind::Slash),

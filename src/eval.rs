@@ -9,7 +9,7 @@
 
 use crate::ast::{BinOp, UnOp};
 use crate::env::{self, Predicate};
-use crate::ir::{Ir, IrExpr, IrExprKind, IrRule};
+use crate::ir::{Ir, IrExpr, IrExprKind, IrRule, ParamValues};
 use crate::state::State;
 use std::cmp::Reverse;
 use std::collections::HashSet;
@@ -37,9 +37,13 @@ pub struct Firing<'a> {
 /// **skipped without being evaluated**. Evaluating it anyway would give the same
 /// firings but a different count of predicate calls, which the differential test
 /// would notice.
-pub fn evaluate<'a>(ir: &'a Ir, state: &State) -> Firing<'a> {
-    let mut order: Vec<&IrRule> = ir.rules.iter().collect();
-    order.sort_by_key(|r| Reverse(r.priority));
+pub fn evaluate<'a>(ir: &'a Ir, params: &ParamValues, state: &State) -> Firing<'a> {
+    // Resolved once, not per rule: a priority sees only parameters, which do not
+    // change within a doctrine window. This is the first of the two phases.
+    let mut order: Vec<(i64, &IrRule)> =
+        ir.rules.iter().map(|r| (priority(r, params), r)).collect();
+    order.sort_by_key(|(p, _)| Reverse(*p));
+    let order: Vec<&IrRule> = order.into_iter().map(|(_, r)| r).collect();
 
     let mut fired_categories: HashSet<u32> = HashSet::new();
     let mut firing = Firing::default();
@@ -48,7 +52,7 @@ pub fn evaluate<'a>(ir: &'a Ir, state: &State) -> Firing<'a> {
         if fired_categories.contains(&rule.category.0) {
             continue;
         }
-        if !rule_fires(rule, state) {
+        if !rule_fires(rule, params, state) {
             continue;
         }
         firing.fired.push(rule);
@@ -60,9 +64,23 @@ pub fn evaluate<'a>(ir: &'a Ir, state: &State) -> Firing<'a> {
     firing
 }
 
+/// A rule's priority, resolved against a doctrine.
+///
+/// Separate from `rule_fires` because the phases are separate: this runs once
+/// when a doctrine lands, that runs every tick.
+pub fn priority(rule: &IrRule, params: &ParamValues) -> i64 {
+    if let IrExprKind::Int(n) = rule.priority.kind {
+        return n;
+    }
+    todo!(
+        "evaluate the priority expression against {} params",
+        params.values.len()
+    )
+}
+
 /// Whether every `require` holds.
-pub fn rule_fires(rule: &IrRule, state: &State) -> bool {
-    let ev = Evaluator::for_rule(rule, state);
+pub fn rule_fires(rule: &IrRule, params: &ParamValues, state: &State) -> bool {
+    let ev = Evaluator::for_rule(rule, params, state);
     for require in &rule.requires {
         if !expect_bool(ev.eval(require)) {
             return false;
@@ -76,8 +94,8 @@ pub fn rule_fires(rule: &IrRule, state: &State) -> bool {
 /// Deliberately does **not** short-circuit, unlike `rule_fires`: this exists to
 /// measure which conjuncts a corpus actually exercises, and a conjunct never
 /// reached tells you nothing about whether it works.
-pub fn conjuncts(rule: &IrRule, state: &State) -> Vec<bool> {
-    let ev = Evaluator::for_rule(rule, state);
+pub fn conjuncts(rule: &IrRule, params: &ParamValues, state: &State) -> Vec<bool> {
+    let ev = Evaluator::for_rule(rule, params, state);
     rule.requires
         .iter()
         .map(|r| expect_bool(ev.eval(r)))
@@ -90,6 +108,8 @@ pub fn conjuncts(rule: &IrRule, state: &State) -> Vec<bool> {
 /// binding cannot leak into the next one.
 struct Evaluator<'a> {
     state: &'a State,
+    #[allow(dead_code, reason = "read once `Param` and `Builtin` are evaluated")]
+    params: &'a ParamValues,
     /// `let` bindings by slot. Lowering numbered them, so nothing here searches
     /// by name — and a binding can only refer to an earlier one, which is why
     /// filling this in order is enough.
@@ -98,9 +118,10 @@ struct Evaluator<'a> {
 
 impl<'a> Evaluator<'a> {
     /// Evaluates the rule's bindings, leaving the scope ready for its requires.
-    fn for_rule(rule: &IrRule, state: &'a State) -> Self {
+    fn for_rule(rule: &IrRule, params: &'a ParamValues, state: &'a State) -> Self {
         let mut ev = Evaluator {
             state,
+            params,
             scope: Vec::with_capacity(rule.lets.len()),
         };
         for binding in &rule.lets {
@@ -115,6 +136,8 @@ impl<'a> Evaluator<'a> {
             IrExprKind::Int(n) => Value::Int(*n),
             IrExprKind::Float(f) => Value::Float(*f),
             IrExprKind::Binding(slot) => self.scope[*slot as usize],
+            IrExprKind::Param(slot) => todo!("read param slot {slot}"),
+            IrExprKind::Builtin(id, args) => todo!("apply {id:?} to {} args", args.len()),
             IrExprKind::Predicate(id, args) => self.apply(*id, args),
             // Only ever an argument, read as a name by `key` and `arg_name`.
             IrExprKind::Member(..) => unreachable!("enum member in a value position"),
@@ -380,7 +403,7 @@ mod tests {
     }
 
     fn fired(ir: &Ir, st: &State) -> Vec<String> {
-        evaluate(ir, st)
+        evaluate(ir, &ParamValues::default(), st)
             .fired
             .into_iter()
             .map(|r| r.name.clone())

@@ -15,14 +15,43 @@ use crate::types::Domain;
 /// A whole rule set, in priority order.
 #[derive(Debug)]
 pub struct Ir {
+    /// Doctrine inputs by slot, in declaration order. `IrExpr::Param` indexes
+    /// this, and a `ParamValues` supplies one number per entry.
+    pub params: Vec<IrParam>,
     pub rules: Vec<IrRule>,
+}
+
+#[derive(Debug)]
+pub struct IrParam {
+    pub name: String,
+    pub kind: crate::ast::ParamKind,
+    pub span: Span,
+}
+
+/// What a doctrine supplies for one parameter.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ParamValue {
+    Int(i64),
+    Float(f64),
+}
+
+/// A doctrine's numbers, positional so a lookup is an index rather than a hash.
+///
+/// Built against an `Ir`, since only the parameter list says what order the
+/// values go in or how many there should be.
+#[derive(Debug, Default, Clone)]
+pub struct ParamValues {
+    pub values: Vec<ParamValue>,
 }
 
 #[derive(Debug)]
 pub struct IrRule {
     /// Output only — emitted, never compared, so no reason to intern.
     pub name: String,
-    pub priority: i64,
+    /// Resolved once per doctrine rather than per tick: the engine sorts on it,
+    /// so it has to be a number before the first evaluation. Restricted by the
+    /// checker to parameters, literals and `lerp`.
+    pub priority: IrExpr,
     pub category: CategoryId,
     pub exclusive: bool,
     pub action: IrAction,
@@ -77,6 +106,13 @@ pub enum IrExprKind {
 
     /// A `let` binding, by slot into `IrRule::lets`.
     Binding(u32),
+
+    /// A doctrine parameter, by slot into `Ir::params`.
+    Param(u32),
+
+    /// A pure function — `lerp`, `lerpf`. Kept distinct from `Predicate`
+    /// because reading no state is what makes it legal in a priority.
+    Builtin(crate::env::Builtin, Vec<IrExpr>),
 
     Unary(crate::ast::UnOp, Box<IrExpr>),
     Binary(crate::ast::BinOp, Box<IrExpr>, Box<IrExpr>),

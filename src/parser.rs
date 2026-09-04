@@ -6,7 +6,7 @@
 //!
 //! Reasoning is in `docs/implementation.md`.
 
-use crate::ast::{Action, Ast, BinOp, Expr, ExprKind, Let, Name, Rule, UnOp};
+use crate::ast::{Action, Ast, BinOp, Expr, ExprKind, Let, Name, Param, Rule, UnOp};
 use crate::diag::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
 
@@ -34,14 +34,30 @@ impl<'a> Parser<'a> {
     }
 
     fn parse(&mut self) -> Ast {
+        let mut params = Vec::new();
         let mut rules = Vec::new();
         while !self.at_end() {
+            if self.peek() == &TokenKind::Param {
+                match self.param() {
+                    Some(p) => params.push(p),
+                    None => self.recover(),
+                }
+                continue;
+            }
             match self.rule() {
                 Some(r) => rules.push(r),
                 None => self.recover(),
             }
         }
-        Ast { rules }
+        Ast { params, rules }
+    }
+
+    /// `param aggression: float`
+    ///
+    /// Declaration order is the slot order lowering assigns, so this must
+    /// preserve it.
+    fn param(&mut self) -> Option<Param> {
+        todo!("parse a param declaration")
     }
 
     fn rule(&mut self) -> Option<Rule> {
@@ -59,7 +75,7 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        let mut priority: Option<i64> = None;
+        let mut priority: Option<Expr> = None;
         let mut category: Option<Name> = None;
         let mut exclusive = false;
         let mut action: Option<Action> = None;
@@ -73,12 +89,14 @@ impl<'a> Parser<'a> {
                 TokenKind::Priority => {
                     let kw = self.peek_span();
                     self.bump(); // `priority`
-                    if let Some(n) = self.number() {
-                        if priority.is_some() {
-                            self.error(kw, "duplicate `priority`".into());
-                        }
-                        priority = Some(n);
+                    // An expression now, so a doctrine can set it. What may
+                    // appear in one is the checker's business, not the
+                    // grammar's — see `docs/design.md`, "Two phases".
+                    let e = self.expr();
+                    if priority.is_some() {
+                        self.error(kw, "duplicate `priority`".into());
                     }
+                    priority = Some(e);
                 }
                 TokenKind::Category => {
                     let kw = self.peek_span();
@@ -412,17 +430,6 @@ impl<'a> Parser<'a> {
         let span = self.peek_span();
         self.error(span, format!("expected {kind:?}"));
         false
-    }
-
-    fn number(&mut self) -> Option<i64> {
-        let span = self.peek_span();
-        if let TokenKind::Number(n) = *self.peek() {
-            self.bump();
-            Some(n)
-        } else {
-            self.error(span, "expected a number".into());
-            None
-        }
     }
 
     /// An action name, with arguments when it is built by a factory.

@@ -100,6 +100,53 @@ pub struct Member {
     pub name: &'static str,
 }
 
+// ---- builtins ----
+
+/// A pure function. The only two, because they are the only arithmetic the Go
+/// compiler does on a doctrine value: 66 calls to `lerp` and 5 to `lerpf`.
+///
+/// Separate from `Predicate` because they read no state, which is exactly what
+/// lets them appear in a `priority` — see `docs/design.md`, "Two phases".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Builtin {
+    Lerp,
+    Lerpf,
+}
+
+pub struct BuiltinSignature {
+    pub id: Builtin,
+    pub name: &'static str,
+    pub params: &'static [ParamType],
+    pub ret: Type,
+}
+
+pub const BUILTINS: &[BuiltinSignature] = &[
+    BuiltinSignature {
+        id: Builtin::Lerp,
+        name: "lerp",
+        params: &[
+            ParamType::Exact(Type::Int),
+            ParamType::Exact(Type::Int),
+            ParamType::Exact(Type::Float),
+        ],
+        ret: Type::Int,
+    },
+    BuiltinSignature {
+        id: Builtin::Lerpf,
+        name: "lerpf",
+        params: &[
+            ParamType::Exact(Type::Float),
+            ParamType::Exact(Type::Float),
+            ParamType::Exact(Type::Float),
+        ],
+        ret: Type::Float,
+    },
+];
+
+pub fn builtin(name: &str) -> Option<&'static BuiltinSignature> {
+    BUILTINS.iter().find(|b| b.name == name)
+}
+
 // ---- predicates ----
 
 /// What a production queue can be asked to build. Disjoint by construction:

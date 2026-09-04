@@ -11,6 +11,10 @@
 //! emits comes later.
 
 use serde::Deserialize;
+use vimyc::ir::ParamValues;
+
+/// No rule set carries parameters yet, so every call site passes an empty set.
+const NO_PARAMS: ParamValues = ParamValues { values: Vec::new() };
 
 #[derive(Debug, Deserialize)]
 pub struct Rule {
@@ -43,6 +47,15 @@ fn corpus_loads() {
 fn seed_source() -> String {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/rules/seed.vy");
     std::fs::read_to_string(path).unwrap_or_else(|e| panic!("read seed.vy: {e}"))
+}
+
+/// seed.vy sets every priority to a plain number; a doctrine-derived one would
+/// not be comparable here at all.
+fn literal_priority(e: &vimyc::ast::Expr) -> i64 {
+    match e.kind {
+        vimyc::ast::ExprKind::Int(n) => n,
+        _ => panic!("seed.vy has a priority that is not a literal"),
+    }
 }
 
 /// Checks and lowers, which is the only route to an `Ir`. Panics on an error
@@ -114,7 +127,12 @@ fn seed_matches_the_go_corpus() {
             .find(|r| r.name.text == want.name)
             .unwrap_or_else(|| panic!("`{}` missing from seed.vy", want.name));
 
-        assert_eq!(got.priority, want.priority, "{}: priority", want.name);
+        assert_eq!(
+            literal_priority(&got.priority),
+            want.priority,
+            "{}: priority",
+            want.name
+        );
         assert_eq!(got.category.text, want.category, "{}: category", want.name);
         assert_eq!(got.exclusive, want.exclusive, "{}: exclusive", want.name);
         assert_eq!(
@@ -253,9 +271,10 @@ fn the_differential_corpus_exercises_every_conjunct() {
         let Some(ri) = ir.rules.iter().position(|r| r.name == case.rule) else {
             continue;
         };
-        for (ci, held) in vimyc::eval::conjuncts(&ir.rules[ri], &corpus.states[case.state])
-            .iter()
-            .enumerate()
+        for (ci, held) in
+            vimyc::eval::conjuncts(&ir.rules[ri], &NO_PARAMS, &corpus.states[case.state])
+                .iter()
+                .enumerate()
         {
             let e = &mut counts[ri][ci];
             if *held { e.0 += 1 } else { e.1 += 1 }
@@ -348,7 +367,7 @@ fn seed_agrees_with_expr() {
             .find(|r| r.name == case.rule)
             .unwrap_or_else(|| panic!("line {}: unknown rule `{}`", i + 1, case.rule));
 
-        let got = vimyc::eval::rule_fires(rule, &corpus.states[case.state]);
+        let got = vimyc::eval::rule_fires(rule, &NO_PARAMS, &corpus.states[case.state]);
         checked += 1;
         if got != case.fired {
             mismatches.push(format!(
@@ -465,7 +484,8 @@ fn real_rule_sets_lower() {
 #[test]
 fn emitted_expr_round_trips_to_go() {
     let ir = lower_checked(&parse_seed());
-    let vimyc::emit::Artifact::Expr(emitted) = vimyc::emit::emit(&ir, vimyc::emit::Target::Expr);
+    let vimyc::emit::Artifact::Expr(emitted) =
+        vimyc::emit::emit(&ir, &NO_PARAMS, vimyc::emit::Target::Expr);
 
     let expected = seed();
     let squeeze = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -514,7 +534,8 @@ fn emit_one(requires: &str) -> String {
         Ok(c) => c.ir,
         Err(diags) => panic!("{requires}: {diags:?}"),
     };
-    let vimyc::emit::Artifact::Expr(rules) = vimyc::emit::emit(&ir, vimyc::emit::Target::Expr);
+    let vimyc::emit::Artifact::Expr(rules) =
+        vimyc::emit::emit(&ir, &NO_PARAMS, vimyc::emit::Target::Expr);
     rules[0].condition.clone()
 }
 

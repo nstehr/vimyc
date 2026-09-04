@@ -12,14 +12,14 @@
 use crate::ast::{BinOp, UnOp};
 use crate::emit::RuleSource;
 use crate::env;
-use crate::ir::{Ir, IrExpr, IrExprKind, IrRule};
+use crate::ir::{Ir, IrExpr, IrExprKind, IrRule, ParamValues};
 use crate::types::{Domain, Type};
 
-pub fn emit(ir: &Ir) -> Vec<RuleSource> {
-    ir.rules.iter().map(emit_rule).collect()
+pub fn emit(ir: &Ir, params: &ParamValues) -> Vec<RuleSource> {
+    ir.rules.iter().map(|r| emit_rule(r, params)).collect()
 }
 
-fn emit_rule(rule: &IrRule) -> RuleSource {
+fn emit_rule(rule: &IrRule, params: &ParamValues) -> RuleSource {
     let mut condition = String::new();
     for (i, require) in rule.requires.iter().enumerate() {
         if i > 0 {
@@ -32,7 +32,7 @@ fn emit_rule(rule: &IrRule) -> RuleSource {
 
     RuleSource {
         name: rule.name.clone(),
-        priority: rule.priority,
+        priority: crate::eval::priority(rule, params),
         category: env::category_name(rule.category.0).to_string(),
         exclusive: rule.exclusive,
         action: emit_action(rule),
@@ -65,6 +65,12 @@ fn emit_bare(e: &IrExpr, rule: &IrRule, out: &mut String) {
     match &e.kind {
         IrExprKind::Int(n) => out.push_str(&n.to_string()),
         IrExprKind::Float(f) => out.push_str(&crate::state::render_number(*f)),
+
+        // Folded to the number the doctrine supplied. The other binding time —
+        // the engine answering `Aggression()` at evaluation time — would emit a
+        // call here instead; `docs/design.md` covers why that stays open.
+        IrExprKind::Param(slot) => todo!("fold param slot {slot}"),
+        IrExprKind::Builtin(id, args) => todo!("fold {id:?} over {} args", args.len()),
         IrExprKind::Member(domain, index) => out.push_str(env::member_name(*domain, *index)),
         IrExprKind::Binding(slot) => emit_bare(&rule.lets[*slot as usize], rule, out),
         other => unreachable!("action argument is not a literal: {other:?}"),
@@ -116,6 +122,12 @@ fn emit_expr(e: &IrExpr, rule: &IrRule, parent: u8, out: &mut String) {
     match &e.kind {
         IrExprKind::Int(n) => out.push_str(&n.to_string()),
         IrExprKind::Float(f) => out.push_str(&crate::state::render_number(*f)),
+
+        // Folded to the number the doctrine supplied. The other binding time —
+        // the engine answering `Aggression()` at evaluation time — would emit a
+        // call here instead; `docs/design.md` covers why that stays open.
+        IrExprKind::Param(slot) => todo!("fold param slot {slot}"),
+        IrExprKind::Builtin(id, args) => todo!("fold {id:?} over {} args", args.len()),
 
         // Enum literals are quoted strings on Go's side, in Go's spelling.
         IrExprKind::Member(domain, index) => {
