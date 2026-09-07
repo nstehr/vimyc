@@ -38,6 +38,22 @@ struct GoRule {
 /// frozen corpus is that an unexpected rule is still an error.
 const POST_PORT: &[&str] = &["form-harvester-guard", "guard-harvesters"];
 
+/// Where Vimy's rule sets live.
+///
+/// They are Vimy's strategy, not this compiler's, so they live in that repo —
+/// the way its `.go` files do. `VIMY_RULES` overrides the sibling default, and
+/// these tests skip when it is not there: they verify another project's content
+/// and cannot run without it. `rules/fixture.vy` is what the compiler's own
+/// tests use.
+fn vy_dir() -> Option<std::path::PathBuf> {
+    let dir = std::env::var("VIMY_RULES")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../vimy/vimy-core/rules/vy")
+        });
+    dir.is_dir().then_some(dir)
+}
+
 fn corpus() -> Option<Vec<Case>> {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/acceptance.json");
     let json = std::fs::read_to_string(path).ok()?;
@@ -120,8 +136,12 @@ fn block_matches_go(file: &str) {
         return;
     };
 
-    let path = format!("{}/rules/{file}", env!("CARGO_MANIFEST_DIR"));
-    let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let Some(dir) = vy_dir() else {
+        eprintln!("Vimy's rules are not beside this checkout; skipping");
+        return;
+    };
+    let path = dir.join(file);
+    let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
     let (tokens, ld) = vimyc::lexer::lex(&src);
     assert!(ld.is_empty(), "{ld:?}");
     let (ast, pd) = vimyc::parser::parse(&tokens);
@@ -245,11 +265,15 @@ fn the_blocks_cover_every_rule_go_emits() {
         eprintln!("no acceptance corpus; run TestDumpAcceptanceCorpus");
         return;
     };
+    let Some(dir) = vy_dir() else {
+        eprintln!("Vimy's rules are not beside this checkout; skipping");
+        return;
+    };
 
     let mut ported: HashSet<String> = HashSet::new();
     for file in BLOCKS {
-        let path = format!("{}/rules/{file}", env!("CARGO_MANIFEST_DIR"));
-        let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+        let path = dir.join(file);
+        let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
         let (tokens, _) = vimyc::lexer::lex(&src);
         let (ast, _) = vimyc::parser::parse(&tokens);
         let ir = vimyc::check::check(&ast)
@@ -281,7 +305,7 @@ fn the_blocks_cover_every_rule_go_emits() {
     // would compare it.
     let mut emitted: HashSet<String> = HashSet::new();
     for file in BLOCKS {
-        let path = format!("{}/rules/{file}", env!("CARGO_MANIFEST_DIR"));
+        let path = dir.join(file);
         let src = std::fs::read_to_string(&path).expect("block");
         let (tokens, _) = vimyc::lexer::lex(&src);
         let (ast, _) = vimyc::parser::parse(&tokens);
@@ -335,8 +359,11 @@ fn emitted_vy_round_trips() {
         return;
     };
 
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/rules/doctrine.vy");
-    let src = std::fs::read_to_string(path).expect("doctrine.vy");
+    let Some(dir) = vy_dir() else {
+        eprintln!("Vimy's rules are not beside this checkout; skipping");
+        return;
+    };
+    let src = std::fs::read_to_string(dir.join("doctrine.vy")).expect("doctrine.vy");
     let (tokens, _) = vimyc::lexer::lex(&src);
     let (ast, _) = vimyc::parser::parse(&tokens);
 

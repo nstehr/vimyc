@@ -167,3 +167,18 @@ doctrine. Only the rule names the file defines are compared, so an unported bloc
 is absent from both sides rather than a failure. A rule vimyc emits that Go did
 not — or the reverse — is a gate that is wrong, which is the mistake a hand-port
 makes most.
+
+## Where the rule sets live
+
+Vimy's rule sources — `seed.vy`, `doctrine.vy` and the six blocks it is built
+from — live in `vimy-core/rules/vy/`, not here. They are Vimy's strategy; this
+is the language they are written in.
+
+The tests that verify them find them at `../vimy/vimy-core/rules/vy`, or wherever
+`VIMY_RULES` points, and skip when neither exists. So a standalone vimyc checkout
+runs the compiler's own tests and not the integration ones — which is honest,
+since those check another project's content.
+
+`rules/` here holds only this compiler's fixtures: `grammar.vy` exercises every
+production, `params.vy` the parameter feature, `fixture.vy` is a realistic rule
+set for the unit tests, and `typo.vy` is what the checker should reject.

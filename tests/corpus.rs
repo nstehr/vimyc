@@ -44,9 +44,13 @@ fn corpus_loads() {
 }
 
 /// Reads `rules/seed.vy` — the hand translation of `DefaultRules()`.
-fn seed_source() -> String {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/rules/seed.vy");
-    std::fs::read_to_string(path).unwrap_or_else(|e| panic!("read seed.vy: {e}"))
+fn seed_source() -> Option<String> {
+    let dir = std::env::var("VIMY_RULES")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../vimy/vimy-core/rules/vy")
+        });
+    std::fs::read_to_string(dir.join("seed.vy")).ok()
 }
 
 /// seed.vy sets every priority to a plain number; a doctrine-derived one would
@@ -68,8 +72,8 @@ fn lower_checked(ast: &vimyc::ast::Ast) -> vimyc::ir::Ir {
     }
 }
 
-fn parse_seed() -> vimyc::ast::Ast {
-    let src = seed_source();
+fn parse_seed() -> Option<vimyc::ast::Ast> {
+    let src = seed_source()?;
     let (tokens, lex_diags) = vimyc::lexer::lex(&src);
     assert!(lex_diags.is_empty(), "seed.vy does not lex: {lex_diags:?}");
     let (ast, parse_diags) = vimyc::parser::parse(&tokens);
@@ -77,7 +81,14 @@ fn parse_seed() -> vimyc::ast::Ast {
         parse_diags.is_empty(),
         "seed.vy does not parse: {parse_diags:?}"
     );
-    ast
+    Some(ast)
+}
+
+/// Every test below reads Vimy's rules, which live in that repo. `skipped`
+/// says so once rather than at each call site.
+fn skipped() -> bool {
+    eprintln!("Vimy's rules are not beside this checkout; skipping");
+    true
 }
 
 /// Splits an expr condition on top-level `&&`, ignoring those inside parens.
@@ -104,7 +115,10 @@ fn conjuncts(cond: &str) -> usize {
 /// Milestone 1 — the seed rules lex and parse.
 #[test]
 fn seed_parses() {
-    let ast = parse_seed();
+    let Some(ast) = parse_seed() else {
+        skipped();
+        return;
+    };
     assert_eq!(ast.rules.len(), 13);
 }
 
@@ -115,7 +129,10 @@ fn seed_parses() {
 /// differs, but one top-level `&&` conjunct must equal one `require` line.
 #[test]
 fn seed_matches_the_go_corpus() {
-    let ast = parse_seed();
+    let Some(ast) = parse_seed() else {
+        skipped();
+        return;
+    };
     let expected = seed();
 
     assert_eq!(ast.rules.len(), expected.len(), "rule count");
@@ -148,7 +165,10 @@ fn seed_matches_the_go_corpus() {
 /// Rules appear in the same order as the Go source, which is priority order.
 #[test]
 fn seed_preserves_rule_order() {
-    let ast = parse_seed();
+    let Some(ast) = parse_seed() else {
+        skipped();
+        return;
+    };
     let got: Vec<&str> = ast.rules.iter().map(|r| r.name.text.as_str()).collect();
     let want: Vec<String> = seed().into_iter().map(|r| r.name).collect();
     assert_eq!(got, want);
@@ -157,7 +177,10 @@ fn seed_preserves_rule_order() {
 /// Milestone 2 — every seed condition type checks as a bool.
 #[test]
 fn seed_type_checks() {
-    let ast = parse_seed();
+    let Some(ast) = parse_seed() else {
+        skipped();
+        return;
+    };
     let checked = vimyc::check::check(&ast).expect("seed.vy does not type check");
     assert!(
         checked.warnings.is_empty(),
@@ -255,8 +278,15 @@ fn the_differential_corpus_exercises_every_rule() {
 fn the_differential_corpus_exercises_every_conjunct() {
     let corpus = differential_corpus();
     let cases = &corpus.cases;
-    let src = seed_source();
-    let ir = lower_checked(&parse_seed());
+    let Some(src) = seed_source() else {
+        skipped();
+        return;
+    };
+    let Some(ast) = parse_seed() else {
+        skipped();
+        return;
+    };
+    let ir = lower_checked(&ast);
 
     let mut counts: Vec<Vec<(usize, usize)>> = ir
         .rules
@@ -351,7 +381,11 @@ fn differential_corpus() -> DifferentialCorpus {
 fn seed_agrees_with_expr() {
     let corpus = differential_corpus();
     let cases = &corpus.cases;
-    let ir = lower_checked(&parse_seed());
+    let Some(ast) = parse_seed() else {
+        skipped();
+        return;
+    };
+    let ir = lower_checked(&ast);
 
     let mut checked = 0usize;
     let mut mismatches = Vec::new();
@@ -444,7 +478,11 @@ fn the_documented_grammar_parses_and_checks() {
 /// something it should not have — so simply running it is the assertion.
 #[test]
 fn seed_lowers() {
-    let ir = lower_checked(&parse_seed());
+    let Some(ast) = parse_seed() else {
+        skipped();
+        return;
+    };
+    let ir = lower_checked(&ast);
     assert_eq!(ir.rules.len(), 13);
 
     // `count(powr)` and `count(idle-ground-units)` are different predicates
@@ -492,7 +530,11 @@ fn real_rule_sets_lower() {
 /// hands and spacing is not meaning.
 #[test]
 fn emitted_expr_round_trips_to_go() {
-    let ir = lower_checked(&parse_seed());
+    let Some(ast) = parse_seed() else {
+        skipped();
+        return;
+    };
+    let ir = lower_checked(&ast);
     let vimyc::emit::Artifact::Expr(emitted) =
         vimyc::emit::emit(&ir, &NO_PARAMS, vimyc::emit::Target::Expr)
     else {

@@ -474,8 +474,8 @@ mod tests {
     use crate::parser::parse;
 
     fn seed() -> Ir {
-        let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/rules/seed.vy"))
-            .expect("seed.vy");
+        let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/rules/fixture.vy"))
+            .expect("fixture.vy");
         let (tokens, ld) = lex(&src);
         assert!(ld.is_empty(), "{ld:?}");
         let (ast, pd) = parse(&tokens);

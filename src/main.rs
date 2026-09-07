@@ -16,7 +16,8 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    const USAGE: &str = "usage: vimyc <file> [state.json] [--json|--vy] [--params <file>|-]\n       vimyc --tokens";
+    const USAGE: &str =
+        "usage: vimyc <file> [state.json] [--json|--vy] [--params <file>|-]\n       vimyc --tokens";
 
     // Explicit rather than scanning: `--params` with nothing after it used to
     // index past the end, and stray positional arguments vanished silently.

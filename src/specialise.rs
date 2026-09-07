@@ -293,8 +293,8 @@ mod tests {
     /// parameters comes out exactly as it went in.
     #[test]
     fn a_rule_set_without_parameters_is_unchanged() {
-        let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/rules/seed.vy"))
-            .expect("seed.vy");
+        let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/rules/fixture.vy"))
+            .expect("fixture.vy");
         let (tokens, _) = lexer::lex(&src);
         let (ast, _) = parser::parse(&tokens);
         let mut ir = check::check(&ast).expect("checks").ir;

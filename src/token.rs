@@ -76,8 +76,22 @@ impl TokenKind {
     ///
     /// `keywords_match_the_lookup` keeps the two in step.
     pub const KEYWORDS: &'static [&'static str] = &[
-        "rule", "priority", "category", "exclusive", "do", "require", "because", "let", "and",
-        "or", "not", "exists", "param", "def", "int", "float",
+        "rule",
+        "priority",
+        "category",
+        "exclusive",
+        "do",
+        "require",
+        "because",
+        "let",
+        "and",
+        "or",
+        "not",
+        "exists",
+        "param",
+        "def",
+        "int",
+        "float",
     ];
 
     /// The operators, longest first — which is the order a lexer must try them
