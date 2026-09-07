@@ -1,12 +1,12 @@
 //! CLI: check a rule set, optionally evaluate it against a state, or emit the
 //! build artifact Vimy embeds. `docs/implementation.md` has the rest.
 use std::env;
+use std::path::PathBuf;
 use vimyc::check::check;
-use vimyc::diag::{Diagnostic, Severity, SourceFile};
+use vimyc::diag::{Diagnostic, Severity, SourceMap};
 use vimyc::eval::evaluate;
-use vimyc::lexer::lex;
-use vimyc::parser::parse;
 use vimyc::state::State;
+use vimyc::unit::{self, Unit};
 
 fn main() {
     if let Err(e) = run() {
@@ -16,8 +16,10 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    const USAGE: &str =
-        "usage: vimyc <file> [state.json] [--json|--vy] [--params <file>|-]\n       vimyc --tokens";
+    const USAGE: &str = "usage: vimyc <input>... [state.json] [--json|--vy] \
+                         [--params <file>|-]\n       vimyc --tokens\n\n\
+                         An input is a .vy file or a directory of them; several \
+                         make one rule set.";
 
     // Explicit rather than scanning: `--params` with nothing after it used to
     // index past the end, and stray positional arguments vanished silently.
@@ -61,31 +63,36 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let mut positional = positional.into_iter();
-    let Some(path) = positional.next() else {
+    // Classified by extension rather than by position: a rule set is any number of
+    // inputs now, so "the second positional is the state" no longer identifies
+    // anything. A `.vy` file or a directory is source; the one other positional
+    // is the state to evaluate against.
+    let mut inputs: Vec<PathBuf> = Vec::new();
+    let mut state_path: Option<String> = None;
+    for arg in positional {
+        let path = PathBuf::from(&arg);
+        if path.is_dir() || path.extension().is_some_and(|e| e == "vy") {
+            inputs.extend(unit::expand(&path).map_err(|e| e.to_string())?);
+        } else if state_path.replace(arg.clone()).is_some() {
+            return Err(format!("unexpected argument `{arg}`\n{USAGE}").into());
+        }
+    }
+    if inputs.is_empty() {
         return Err(format!("no input file\n{USAGE}").into());
-    };
-    let state_path = positional.next();
-    if let Some(extra) = positional.next() {
-        return Err(format!("unexpected argument `{extra}`\n{USAGE}").into());
     }
 
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
-    let src = SourceFile::new(path, text);
-
-    let (tokens, lex_diags) = lex(src.text());
-    report(&src, &lex_diags);
-
-    // Parsed even after a lexing error: one bad character should not hide every
-    // problem after it.
-    let (ast, parse_diags) = parse(&tokens);
-    report(&src, &parse_diags);
+    let unit = Unit::read(&inputs).map_err(|e| e.to_string())?;
+    let Unit {
+        ast,
+        sources: src,
+        diags,
+    } = unit;
+    report(&src, &diags);
 
     // Type errors after a syntax error are noise: the tree is full of holes the
     // parser already reported.
-    let errors = lex_diags.len() + parse_diags.len();
-    if errors > 0 {
-        return Err(format!("{errors} error(s)").into());
+    if !diags.is_empty() {
+        return Err(format!("{} error(s)", diags.len()).into());
     }
 
     // The only way to an `Ir`, so nothing below can run on a rule set that did
@@ -99,6 +106,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
     report(&src, &checked.warnings);
+
+    // Checking only: nothing was asked for that needs a doctrine, so stop
+    // before binding rather than failing on the first unbound parameter. What
+    // this cannot report is the warnings that compare priorities — a priority
+    // is not a number until a doctrine sets it — so those need `--params`.
+    if params_path.is_none() && !emit_json && !emit_vy && state_path.is_none() {
+        return Ok(());
+    }
 
     let supplied = match params_path.as_deref() {
         // `-` for stdin, so a caller compiling a doctrine per game window needs
@@ -156,16 +171,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn report(src: &SourceFile, diags: &[Diagnostic]) {
+fn report(src: &SourceMap, diags: &[Diagnostic]) {
     for d in diags {
-        let lc = src.line_column(d.span.start);
         let label = match d.severity {
             Severity::Error => "error",
             Severity::Warning => "warning",
         };
-        eprintln!(
-            "{}:{}:{}: {label}: {}",
-            src.name, lc.line, lc.col, d.message
-        );
+        match src.resolve(d.span.start) {
+            Some((file, lc)) => eprintln!(
+                "{}:{}:{}: {label}: {}",
+                file.name, lc.line, lc.col, d.message
+            ),
+            // No file to point at means nothing was compiled, so this is a
+            // diagnostic about the unit itself rather than about a line.
+            None => eprintln!("{label}: {}", d.message),
+        }
     }
 }

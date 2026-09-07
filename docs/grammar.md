@@ -10,7 +10,7 @@
 <def-params>     ::= <def-param> ( "," <def-param> )* [ "," ]
 <def-param>      ::= <name> ":" <param-type>
 
-; A doctrine input: file-scoped, constant within a doctrine window, supplied
+; A doctrine input: unit-scoped, constant within a doctrine window, supplied
 ; from outside the file. See docs/design.md, "Parameters".
 <param>          ::= "param" <name> ":" <param-type>
 <param-type>     ::= "int" | "float"

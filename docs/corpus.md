@@ -168,11 +168,34 @@ is absent from both sides rather than a failure. A rule vimyc emits that Go did
 not — or the reverse — is a gate that is wrong, which is the mistake a hand-port
 makes most.
 
+## Diverging from the corpus on purpose
+
+The corpus is frozen — `CompileDoctrine` is deleted, so nothing regenerates it —
+which makes every deliberate change to the rule set a disagreement with it. Two
+lists in `tests/acceptance.rs` record what is allowed to disagree, and neither is
+a blanket exemption:
+
+- `POST_PORT` — rules written after the port, which have no counterpart at all.
+- `RETUNED` — rules whose **priority** was deliberately changed, with the reason.
+  Only the priority is exempt; condition, category, action and exclusivity are
+  still held against Go, so a rule cannot drift in some other way behind the
+  entry. `every_retuned_rule_exists_and_still_differs` fails an entry that names
+  a deleted rule or one that no longer differs, so the list cannot only grow.
+
+Every current `RETUNED` entry is a tie broken on purpose: Go gave two rules in
+one exclusive category the same priority, so which of them got the queue was
+decided by an unstable sort.
+
 ## Where the rule sets live
 
-Vimy's rule sources — `seed.vy`, `doctrine.vy` and the six blocks it is built
-from — live in `vimy-core/rules/vy/`, not here. They are Vimy's strategy; this
-is the language they are written in.
+Vimy's rule sources — `seed.vy` and the six topic files that make up the
+doctrine rule set — live in `vimy-core/rules/vy/`, not here. They are Vimy's
+strategy; this is the language they are written in.
+
+The six are one compilation unit, not six rule sets: `core.vy` holds the defs the
+others call, so no block type-checks alone. `the_combined_rule_set_matches_go`
+compiles the directory the way a game does, and the per-block tests compile the
+same unit and narrow the comparison to the names one file declares.
 
 The tests that verify them find them at `../vimy/vimy-core/rules/vy`, or wherever
 `VIMY_RULES` points, and skip when neither exists. So a standalone vimyc checkout

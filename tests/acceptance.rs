@@ -38,6 +38,81 @@ struct GoRule {
 /// frozen corpus is that an unexpected rule is still an error.
 const POST_PORT: &[&str] = &["form-harvester-guard", "guard-harvesters"];
 
+/// Rules whose priority was deliberately changed after the port, and the reason.
+///
+/// Every one of these is a tie broken on purpose: Go gave two rules in one
+/// exclusive category the same priority, so which of them got the queue was
+/// decided by an unstable sort. Only the priority is exempted — the condition,
+/// category, action and exclusivity are still held against the corpus, so this
+/// cannot quietly hide a rule that drifted in some other way.
+const RETUNED: &[(&str, &str)] = &[
+    (
+        "build-aa-defense",
+        "below base defense when the doctrine weights air and ground equally",
+    ),
+    (
+        "build-extra-refinery",
+        "above the tech centre when economy and tech are weighted equally",
+    ),
+    (
+        "build-gap-generator",
+        "below both other defenses; it is the least urgent of the three",
+    ),
+    (
+        "build-naval-yard",
+        "below the airfield when air and naval are weighted equally",
+    ),
+    (
+        "build-second-refinery",
+        "above the tech centre when economy and tech are weighted equally",
+    ),
+    (
+        "build-service-depot",
+        "below the radar, which is the tech gate",
+    ),
+    (
+        "build-tesla-coil-for-shock-trooper",
+        "below the flame tower, the cheaper unlock",
+    ),
+    (
+        "defend-base",
+        "above the scramble it duplicates, being the more specific rule",
+    ),
+    (
+        "produce-apc",
+        "above the flak truck; an engineer is already built and waiting",
+    ),
+    (
+        "produce-assault-apc",
+        "above the vehicle rules, being capped and doctrine-opted-in",
+    ),
+    (
+        "produce-attack-dog",
+        "below specialist infantry when the doctrine puts specialists first",
+    ),
+    (
+        "produce-bridge-infantry",
+        "below the rocket soldier; rifle top-ups are the more disposable",
+    ),
+    (
+        "produce-spy",
+        "below capture-defense rifles, which are cheaper and defensive",
+    ),
+    (
+        "recall-overextended-naval-attack",
+        "below its ground mirror",
+    ),
+    (
+        "rebuild-naval-yard",
+        "below the airfield, which is useful on every map",
+    ),
+    ("squad-disengage-naval-attack", "below its ground mirror"),
+    (
+        "squad-focus-fire",
+        "capped below the retreat band, so retreating outranks it",
+    ),
+];
+
 /// Where Vimy's rule sets live.
 ///
 /// They are Vimy's strategy, not this compiler's, so they live in that repo —
@@ -52,6 +127,41 @@ fn vy_dir() -> Option<std::path::PathBuf> {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../vimy/vimy-core/rules/vy")
         });
     dir.is_dir().then_some(dir)
+}
+
+/// The files of Vimy's rule set, in the order vimyc would read the directory.
+const BLOCKS: &[&str] = &[
+    "buildings.vy",
+    "combat.vy",
+    "core.vy",
+    "economy.vy",
+    "micro.vy",
+    "production.vy",
+];
+
+/// Vimy's rule set, parsed as the one unit a game compiles.
+///
+/// No block stands alone — `core.vy` holds the defs the others call — so there
+/// is nothing to read but the whole set.
+fn rule_set(dir: &std::path::Path) -> vimyc::unit::Unit {
+    let paths: Vec<_> = BLOCKS.iter().map(|f| dir.join(f)).collect();
+    let unit = vimyc::unit::Unit::read(&paths).unwrap_or_else(|e| panic!("{e}"));
+    assert!(unit.diags.is_empty(), "{:?}", unit.diags);
+    unit
+}
+
+/// The rules one block declares, by name.
+///
+/// Parsed rather than checked: a block on its own does not type-check now that
+/// the defs live in `core.vy`, and the names are all this needs.
+fn rules_in(dir: &std::path::Path, file: &str) -> HashSet<String> {
+    let path = dir.join(file);
+    let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
+    let (tokens, ld) = vimyc::lexer::lex(&src);
+    assert!(ld.is_empty(), "{file}: {ld:?}");
+    let (ast, pd) = vimyc::parser::parse(&tokens);
+    assert!(pd.is_empty(), "{file}: {pd:?}");
+    ast.rules.into_iter().map(|r| r.name.text).collect()
 }
 
 fn corpus() -> Option<Vec<Case>> {
@@ -102,35 +212,40 @@ fn trim_zeros(s: &str) -> String {
 
 #[test]
 fn the_economy_block_matches_go() {
-    block_matches_go("economy.vy");
+    block_matches_go(Some("economy.vy"));
 }
 
 #[test]
 fn the_buildings_block_matches_go() {
-    block_matches_go("buildings.vy");
+    block_matches_go(Some("buildings.vy"));
 }
 
 #[test]
 fn the_production_block_matches_go() {
-    block_matches_go("production.vy");
+    block_matches_go(Some("production.vy"));
 }
 
 #[test]
 fn the_combat_block_matches_go() {
-    block_matches_go("combat.vy");
+    block_matches_go(Some("combat.vy"));
 }
 
 #[test]
 fn the_micro_block_matches_go() {
-    block_matches_go("micro.vy");
+    block_matches_go(Some("micro.vy"));
 }
 
 #[test]
 fn the_core_block_matches_go() {
-    block_matches_go("core.vy");
+    block_matches_go(Some("core.vy"));
 }
 
-fn block_matches_go(file: &str) {
+/// Compares one block's rules against Go, or the whole set when `file` is
+/// `None`.
+///
+/// The unit is always the whole rule set — a block does not compile alone — and
+/// `file` only narrows which rules are compared.
+fn block_matches_go(file: Option<&str>) {
     let Some(cases) = corpus() else {
         eprintln!("no acceptance corpus; run TestDumpAcceptanceCorpus");
         return;
@@ -140,22 +255,20 @@ fn block_matches_go(file: &str) {
         eprintln!("Vimy's rules are not beside this checkout; skipping");
         return;
     };
-    let path = dir.join(file);
-    let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
-    let (tokens, ld) = vimyc::lexer::lex(&src);
-    assert!(ld.is_empty(), "{ld:?}");
-    let (ast, pd) = vimyc::parser::parse(&tokens);
-    assert!(pd.is_empty(), "{pd:?}");
+    let label = file.unwrap_or("the rule set");
+    let ast = rule_set(&dir).ast;
 
-    // The names this block claims. Anything outside it belongs to a block that
+    // The names being compared. Anything outside them belongs to a block that
     // has not been ported.
     let ported: HashSet<String> = {
         let ir = vimyc::check::check(&ast)
-            .unwrap_or_else(|d| panic!("{file} does not check: {d:?}"))
+            .unwrap_or_else(|d| panic!("{label} does not check: {d:?}"))
             .ir;
+        let own = file.map(|f| rules_in(&dir, f));
         ir.rules
             .iter()
             .map(|r| r.name.clone())
+            .filter(|n| own.as_ref().is_none_or(|o| o.contains(n)))
             .filter(|n| !POST_PORT.contains(&n.as_str()))
             .collect()
     };
@@ -182,7 +295,9 @@ fn block_matches_go(file: &str) {
             .collect();
 
         for r in &mine {
-            if POST_PORT.contains(&r.name.as_str()) {
+            // The unit emits every block's rules; `ported` is the subset under
+            // comparison, and already has the post-port additions removed.
+            if !ported.contains(&r.name) {
                 continue;
             }
             let Some(want) = theirs.get(r.name.as_str()) else {
@@ -190,7 +305,8 @@ fn block_matches_go(file: &str) {
                 continue;
             };
             compared += 1;
-            let mismatch = if r.priority != want.priority {
+            let retuned = RETUNED.iter().any(|(n, _)| *n == r.name);
+            let mismatch = if r.priority != want.priority && !retuned {
                 Some(format!("priority {} vs {}", r.priority, want.priority))
             } else if r.category != want.category {
                 Some(format!("category {} vs {}", r.category, want.category))
@@ -231,7 +347,7 @@ fn block_matches_go(file: &str) {
             .join("\n")
     );
     eprintln!(
-        "{compared} rules from {file} across {} doctrines match Go",
+        "{compared} rules from {label} across {} doctrines match Go",
         cases.len()
     );
 }
@@ -248,19 +364,65 @@ fn block_matches_go(file: &str) {
 /// would show up here as a rule set that no longer matches Go.
 #[test]
 fn the_combined_rule_set_matches_go() {
-    block_matches_go("doctrine.vy");
+    block_matches_go(None);
+}
+
+/// Every `RETUNED` entry names a real rule that really does differ.
+///
+/// Without this the list only ever grows: an entry for a rule that was deleted,
+/// or one whose priority was later put back, would sit there silently widening
+/// the hole in the comparison.
+#[test]
+fn every_retuned_rule_exists_and_still_differs() {
+    let Some(cases) = corpus() else {
+        eprintln!("no acceptance corpus; run TestDumpAcceptanceCorpus");
+        return;
+    };
+    let Some(dir) = vy_dir() else {
+        eprintln!("Vimy's rules are not beside this checkout; skipping");
+        return;
+    };
+    let ast = rule_set(&dir).ast;
+
+    let names: HashSet<&str> = ast.rules.iter().map(|r| r.name.text.as_str()).collect();
+    for (n, _) in RETUNED {
+        assert!(names.contains(n), "`{n}` is retuned but no longer exists");
+    }
+
+    // A rule is only exempt if some doctrine actually gives it a different
+    // priority from the one Go recorded.
+    let mut differs: HashSet<&str> = HashSet::new();
+    for case in cases.iter().step_by(7) {
+        let mut ir = vimyc::check::check(&ast).expect("checks").ir;
+        let params = vimyc::ir::ParamValues::bind(&ir, &case.params).expect("binds");
+        vimyc::specialise::specialise(&mut ir, &params);
+        let vimyc::emit::Artifact::Expr(mine) =
+            vimyc::emit::emit(&ir, &params, vimyc::emit::Target::Expr)
+        else {
+            unreachable!()
+        };
+        for r in &mine {
+            if let Some(want) = case.rules.iter().find(|g| g.name == r.name)
+                && r.priority != want.priority
+                && let Some((n, _)) = RETUNED.iter().find(|(n, _)| *n == r.name)
+            {
+                differs.insert(n);
+            }
+        }
+    }
+    let stale: Vec<&str> = RETUNED
+        .iter()
+        .map(|(n, _)| *n)
+        .filter(|n| !differs.contains(n))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "retuned but matching Go on every doctrine, so the entry is dead: {stale:?}"
+    );
 }
 
 #[test]
 fn the_blocks_cover_every_rule_go_emits() {
-    const BLOCKS: &[&str] = &[
-        "core.vy",
-        "economy.vy",
-        "buildings.vy",
-        "production.vy",
-        "combat.vy",
-        "micro.vy",
-    ];
     let Some(cases) = corpus() else {
         eprintln!("no acceptance corpus; run TestDumpAcceptanceCorpus");
         return;
@@ -270,23 +432,26 @@ fn the_blocks_cover_every_rule_go_emits() {
         return;
     };
 
+    // Per block rather than from the unit, so this still catches a rule that
+    // two blocks both define — which the unit would happily accept as two
+    // rules with the same name.
     let mut ported: HashSet<String> = HashSet::new();
     for file in BLOCKS {
-        let path = dir.join(file);
-        let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
-        let (tokens, _) = vimyc::lexer::lex(&src);
-        let (ast, _) = vimyc::parser::parse(&tokens);
-        let ir = vimyc::check::check(&ast)
-            .unwrap_or_else(|d| panic!("{file}: {d:?}"))
-            .ir;
-        for r in &ir.rules {
+        for name in rules_in(&dir, file) {
             assert!(
-                ported.insert(r.name.clone()),
-                "`{}` is defined by two blocks",
-                r.name
+                ported.insert(name.clone()),
+                "`{name}` is defined by two blocks"
             );
         }
     }
+    // Every block belongs to the set that actually compiles.
+    let compiled: HashSet<String> = rule_set(&dir)
+        .ast
+        .rules
+        .iter()
+        .map(|r| r.name.text.clone())
+        .collect();
+    assert_eq!(ported, compiled, "a block is missing from BLOCKS");
 
     let mut go: HashSet<&str> = HashSet::new();
     for case in &cases {
@@ -304,17 +469,12 @@ fn the_blocks_cover_every_rule_go_emits() {
     // matters is that vimyc does not emit it either, since no per-block test
     // would compare it.
     let mut emitted: HashSet<String> = HashSet::new();
-    for file in BLOCKS {
-        let path = dir.join(file);
-        let src = std::fs::read_to_string(&path).expect("block");
-        let (tokens, _) = vimyc::lexer::lex(&src);
-        let (ast, _) = vimyc::parser::parse(&tokens);
-        for case in &cases {
-            let mut ir = vimyc::check::check(&ast).expect("checks").ir;
-            let params = vimyc::ir::ParamValues::bind(&ir, &case.params).expect("binds");
-            vimyc::specialise::specialise(&mut ir, &params);
-            emitted.extend(ir.rules.iter().map(|r| r.name.clone()));
-        }
+    let ast = rule_set(&dir).ast;
+    for case in &cases {
+        let mut ir = vimyc::check::check(&ast).expect("checks").ir;
+        let params = vimyc::ir::ParamValues::bind(&ir, &case.params).expect("binds");
+        vimyc::specialise::specialise(&mut ir, &params);
+        emitted.extend(ir.rules.iter().map(|r| r.name.clone()));
     }
 
     // The post-port rules must actually be reachable, or naming one here would
@@ -363,9 +523,7 @@ fn emitted_vy_round_trips() {
         eprintln!("Vimy's rules are not beside this checkout; skipping");
         return;
     };
-    let src = std::fs::read_to_string(dir.join("doctrine.vy")).expect("doctrine.vy");
-    let (tokens, _) = vimyc::lexer::lex(&src);
-    let (ast, _) = vimyc::parser::parse(&tokens);
+    let ast = rule_set(&dir).ast;
 
     let mut checked = 0usize;
     for (i, case) in cases.iter().enumerate().step_by(17) {

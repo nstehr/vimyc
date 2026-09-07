@@ -372,11 +372,54 @@ consumed by value, and a renderer the borrow checker has opinions about.
 ## CLI
 
 ```
-vimyc check <file>          parse + type check, print diagnostics
-vimyc fmt   <file>          rewrite canonically
-vimyc fmt --check <file>    exit non-zero if not canonical
-vimyc eval  <file> <state>  evaluate against a JSON env state
+vimyc <input>...                  parse + type check, print diagnostics
+vimyc <input>... --json           emit the artifact Vimy embeds
+vimyc <input>... --vy             print the rule set after the doctrine
+vimyc <input>... <state.json>     evaluate against a JSON env state
+vimyc <input>... --params <file>  bind the doctrine (`-` for stdin)
+vimyc --tokens                    the token tables, for a highlighter
 ```
+
+With no `--params`, no output flag and no state, vimyc stops after checking:
+that is the check mode, and it needs no doctrine. The warnings that compare
+priorities are the exception — a priority is not a number until a doctrine sets
+one — so those want `--params`.
+
+An `<input>` is a `.vy` file or a directory of them, and several make **one**
+rule set — see "Several files, one unit" below. Positionals are told apart by
+extension rather than by position: `.vy` and directories are source, and the one
+other positional is the state to evaluate against. Order among inputs decides
+nothing but the order of a diagnostic list.
+
+## Several files, one unit
+
+A rule set is written across `core.vy`, `combat.vy`, `economy.vy` and the rest,
+and there is no such thing as compiling one of them: a `def` in one file is
+called from another, and a `param` only means something against the doctrine the
+whole set is bound to. So the unit, not the file, is what parses, checks and
+emits — `unit::Unit` is the type, and `diag::SourceMap` is what turns a span back
+into a file and a line.
+
+Three decisions worth keeping:
+
+**Each file is parsed on its own, and the trees are concatenated.** Concatenating
+the *text* first would be less code, but then one file's unclosed brace swallows
+the next file's rules and the diagnostics point at the wrong place entirely.
+Spans are shifted into a unit-wide space at lex time (`lexer::lex_at`), so a
+`Span` still costs eight bytes and carries no file id.
+
+**Defs resolve across the whole unit, in any order.** The old rule — a def may
+only call an earlier one — was how recursion was ruled out, and it is what makes
+inlining terminate. Kept as a rule about the *call graph* rather than about
+textual order, because otherwise which file an author reached for would decide
+whether a def resolved. `check::declare_defs` claims the names first, then checks
+bodies depth-first over the calls; a back edge is "`x` is recursive", an error,
+so `lower` never sees a cycle to inline forever.
+
+**A `param` may be redeclared with the same type.** Each file naming the doctrine
+inputs it reads is the point of splitting the set up, and a second declaration
+that agrees adds nothing to reject. Two declarations that disagree on the type
+are still an error — only one of them can win.
 
 `fmt --check` costs nothing extra alongside `fmt` and is what lets CI assert
 formatting without a second tool.

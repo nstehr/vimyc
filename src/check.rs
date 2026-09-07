@@ -40,11 +40,21 @@ pub fn check(ast: &Ast) -> Result<Checked, Vec<Diagnostic>> {
 /// outlive the rule it belongs to.
 struct Checker {
     diags: Vec<Diagnostic>,
-    /// In order: a def may only call an earlier one, which rules out recursion
-    /// and so lets inlining terminate.
+    /// In dependency order: a def is checked after everything it calls, so its
+    /// callees' signatures are known. `lower` inlines by name, so the cycle
+    /// check in `declare_defs` is what makes inlining terminate.
     defs: Vec<DefSig>,
-    /// File-scoped, so unlike a `let` these outlive any one rule.
+    /// Unit-scoped, so unlike a `let` these outlive any one rule.
     params: Vec<(String, Type)>,
+}
+
+/// How far `declare_defs` has got with one `def`, for the walk that orders them.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DefState {
+    Unvisited,
+    /// On the current path — reaching it again is a cycle.
+    InProgress,
+    Done,
 }
 
 /// Which of the two evaluations an expression belongs to: a priority resolves
@@ -77,6 +87,27 @@ fn reserved(name: &str) -> Option<String> {
         return Some(format!("`{name}` is a {}", d.name()));
     }
     None
+}
+
+/// Every name called in an expression, for the def dependency walk.
+///
+/// Over-collects on purpose: predicates and builtins land here too, and the
+/// caller drops anything that is not a def. Cheaper than resolving names twice.
+fn calls(e: &Expr, out: &mut Vec<String>) {
+    match &e.kind {
+        ExprKind::Call(name, args) => {
+            out.push(name.text.clone());
+            for a in args {
+                calls(a, out);
+            }
+        }
+        ExprKind::Unary(_, operand) => calls(operand, out),
+        ExprKind::Binary(_, l, r) => {
+            calls(l, out);
+            calls(r, out);
+        }
+        ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Ident(_) | ExprKind::Error => {}
+    }
 }
 
 /// A `def`'s signature, once its body has been checked.
@@ -125,66 +156,124 @@ impl Checker {
         }
     }
 
-    /// Checks each `def` body and records what it returns, in order, with only
-    /// earlier defs in scope.
+    /// Checks every `def` body and records what it returns.
+    ///
+    /// Two passes, because a unit is several files and which one an author put
+    /// a def in should not decide whether it resolves: the first pass claims
+    /// the names, the second checks each body only after everything it calls,
+    /// so a callee's signature is always known. A def that reaches itself is a
+    /// cycle — `lower` inlines by name and would not terminate — so it is an
+    /// error and no `Ir` is produced.
     fn declare_defs(&mut self, defs: &[crate::ast::Def]) {
-        for d in defs {
+        // Which defs are real: a rejected name is left out, so a use of it
+        // reports "unknown name" rather than a second error about the same
+        // declaration.
+        let mut index: Vec<(String, usize)> = Vec::new();
+        for (i, d) in defs.iter().enumerate() {
             let name = &d.name.text;
             if let Some(why) = reserved(name) {
                 let msg = format!("{why} and cannot be a def");
                 self.diags.push(Diagnostic::error(d.name.span, msg));
                 continue;
             }
-            if self.defs.iter().any(|s| s.name == *name)
-                || self.params.iter().any(|(n, _)| n == name)
-            {
+            if index.iter().any(|(n, _)| n == name) || self.params.iter().any(|(n, _)| n == name) {
                 let msg = format!("`{name}` is already declared");
                 self.diags.push(Diagnostic::error(d.name.span, msg));
                 continue;
             }
+            index.push((name.clone(), i));
+        }
 
-            // With the doctrine's parameters rather than in the rule scope:
-            // they are substituted before anything evaluates, and an argument is
-            // checked in the static phase, which does not consult the scope.
-            let mut visible = self.params.clone();
-            for p in &d.params {
-                let ty = match p.kind {
-                    ParamKind::Int => Type::Int,
-                    ParamKind::Float => Type::Float,
-                };
-                if let Some(why) = reserved(&p.name.text) {
-                    let msg = format!("{why} and cannot be a def parameter");
-                    self.diags.push(Diagnostic::error(p.name.span, msg));
-                }
-                visible.push((p.name.text.clone(), ty));
-            }
-
-            let mut checker = RuleChecker {
-                diags: &mut self.diags,
-                scope: Vec::new(),
-                params: &visible,
-                defs: &self.defs,
-                phase: Phase::Tick,
-            };
-            let ret = checker.synth(&d.body);
-
-            self.defs.push(DefSig {
-                name: name.clone(),
-                params: d
-                    .params
-                    .iter()
-                    .map(|p| match p.kind {
-                        ParamKind::Int => Type::Int,
-                        ParamKind::Float => Type::Float,
-                    })
-                    .collect(),
-                ret,
-            });
+        let mut state = vec![DefState::Unvisited; defs.len()];
+        for &(_, i) in &index {
+            self.resolve_def(defs, &index, &mut state, i);
         }
     }
 
-    /// Records the declared parameters, rejecting duplicates and any name that
-    /// would shadow a predicate or a builtin.
+    /// Checks one def, after whichever defs it calls.
+    ///
+    /// Depth-first over the call graph. Recursion in the *checker* mirrors
+    /// recursion in the rule set, so the walk is bounded by the same thing that
+    /// bounds inlining.
+    fn resolve_def(
+        &mut self,
+        defs: &[crate::ast::Def],
+        index: &[(String, usize)],
+        state: &mut Vec<DefState>,
+        i: usize,
+    ) {
+        match state[i] {
+            DefState::Done => return,
+            DefState::InProgress => {
+                // Reported at the def that closes the cycle: that is the one
+                // edge an author can remove.
+                let msg = format!("`{}` is recursive", defs[i].name.text);
+                self.diags.push(Diagnostic::error(defs[i].name.span, msg));
+                state[i] = DefState::Done;
+                return;
+            }
+            DefState::Unvisited => state[i] = DefState::InProgress,
+        }
+
+        let d = &defs[i];
+        // A def's own parameters shadow nothing and are not defs, so a call to
+        // one is not an edge.
+        let mut callees = Vec::new();
+        calls(&d.body, &mut callees);
+        for name in callees {
+            if let Some(&(_, j)) = index.iter().find(|(n, _)| *n == name) {
+                self.resolve_def(defs, index, state, j);
+            }
+        }
+
+        // With the doctrine's parameters rather than in the rule scope:
+        // they are substituted before anything evaluates, and an argument is
+        // checked in the static phase, which does not consult the scope.
+        let mut visible = self.params.clone();
+        for p in &d.params {
+            let ty = match p.kind {
+                ParamKind::Int => Type::Int,
+                ParamKind::Float => Type::Float,
+            };
+            if let Some(why) = reserved(&p.name.text) {
+                let msg = format!("{why} and cannot be a def parameter");
+                self.diags.push(Diagnostic::error(p.name.span, msg));
+            }
+            visible.push((p.name.text.clone(), ty));
+        }
+
+        let mut checker = RuleChecker {
+            diags: &mut self.diags,
+            scope: Vec::new(),
+            params: &visible,
+            defs: &self.defs,
+            phase: Phase::Tick,
+        };
+        let ret = checker.synth(&d.body);
+
+        self.defs.push(DefSig {
+            name: d.name.text.clone(),
+            params: d
+                .params
+                .iter()
+                .map(|p| match p.kind {
+                    ParamKind::Int => Type::Int,
+                    ParamKind::Float => Type::Float,
+                })
+                .collect(),
+            ret,
+        });
+        state[i] = DefState::Done;
+    }
+
+    /// Records the declared parameters, rejecting any name that would shadow a
+    /// predicate or a builtin, and any two declarations that disagree.
+    ///
+    /// A parameter may be declared in more than one file so long as every
+    /// declaration gives it the same type. Each file naming what it reads keeps
+    /// it readable on its own, and there is nothing for a second declaration to
+    /// mean beyond what the first already said. Two different types is a real
+    /// conflict, because only one of them can win.
     fn declare_params(&mut self, params: &[crate::ast::Param]) {
         for p in params {
             let name = &p.name.text;
@@ -193,16 +282,17 @@ impl Checker {
                 ParamKind::Float => Type::Float,
             };
 
+            if let Some((_, prior)) = self.params.iter().find(|(n, _)| n == name) {
+                if *prior != ty && *prior != Type::Error {
+                    let msg = format!("`{name}` is declared as {prior} and as {ty}");
+                    self.diags.push(Diagnostic::error(p.name.span, msg));
+                }
+                continue;
+            }
+
             // Recorded even when rejected, so one bad declaration does not
             // become an "unknown name" at every use.
-            let bad = reserved(name)
-                .map(|why| format!("{why} and cannot be a parameter"))
-                .or_else(|| {
-                    self.params
-                        .iter()
-                        .any(|(n, _)| n == name)
-                        .then(|| format!("`{name}` is declared twice"))
-                });
+            let bad = reserved(name).map(|why| format!("{why} and cannot be a parameter"));
             match bad {
                 Some(msg) => {
                     self.diags.push(Diagnostic::error(p.name.span, msg));
@@ -816,15 +906,55 @@ mod tests {
         }
     }
 
+    // ---- defs across a unit ----
+
+    /// The files of a unit are concatenated in whatever order they were passed,
+    /// so a def written below its caller is normal rather than an error.
     #[test]
-    fn a_parameter_cannot_be_declared_twice() {
+    fn a_def_may_be_called_before_it_is_declared() {
+        let src = "def outer() = inner() >= 100
+def inner() = cash
+                   rule r {\n priority 1\n category economy\n do scout\n                    require outer()\n}\n";
+        assert!(messages(src).is_empty(), "{:?}", messages(src));
+    }
+
+    /// `lower` inlines a def by name and would not terminate on a cycle, so
+    /// this error is what makes inlining sound now that order does not.
+    #[test]
+    fn a_recursive_def_is_rejected() {
+        let src = "def loop() = loop()\n                   rule r {\n priority 1\n category economy\n do scout\n                    require loop()\n}\n";
+        let e = messages(src);
+        assert!(e.iter().any(|m| m.contains("is recursive")), "{e:?}");
+    }
+
+    #[test]
+    fn a_cycle_through_another_def_is_rejected() {
+        let src = "def a() = b()\ndef b() = a()\n                   rule r {\n priority 1\n category economy\n do scout\n                    require a()\n}\n";
+        let e = messages(src);
+        assert!(e.iter().any(|m| m.contains("is recursive")), "{e:?}");
+    }
+
+    /// Several files each naming the doctrine inputs they read is the point of
+    /// splitting a rule set up, so a repeat that says the same thing is fine.
+    #[test]
+    fn a_parameter_may_be_declared_again_with_the_same_type() {
+        let e = messages(&param_src(
+            "param aggression: float\nparam aggression: float\n",
+            "1",
+            "aggression > 0.5",
+        ));
+        assert!(e.is_empty(), "{e:?}");
+    }
+
+    #[test]
+    fn a_parameter_cannot_be_declared_twice_with_different_types() {
         let e = messages(&param_src(
             "param aggression: float\nparam aggression: int\n",
             "1",
             "cash >= 1",
         ));
         assert_eq!(e.len(), 1, "{e:?}");
-        assert!(e[0].contains("declared twice"), "{e:?}");
+        assert!(e[0].contains("declared as float and as int"), "{e:?}");
     }
 
     #[test]

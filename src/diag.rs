@@ -71,6 +71,70 @@ impl Span {
     }
 }
 
+/// The files of one compilation unit, laid end to end in a single span space.
+///
+/// A rule set is written across several files but checked as one — a `def` in
+/// `core.vy` is called from `combat.vy`, so there is nothing to check until
+/// they are together. Spans stay plain byte offsets (see `docs/design.md`);
+/// this is what turns one back into a file and a line.
+///
+/// Files are separated by one virtual byte, so the end-of-file span of one file
+/// cannot be read as the first byte of the next.
+pub struct SourceMap {
+    files: Vec<SourceFile>,
+    /// Unit offset where each file begins, parallel to `files`.
+    bases: Vec<u32>,
+    next: u32,
+}
+
+impl Default for SourceMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SourceMap {
+    pub fn new() -> Self {
+        SourceMap {
+            files: Vec::new(),
+            bases: Vec::new(),
+            next: 0,
+        }
+    }
+
+    /// Adds a file and returns the offset its spans must be shifted by.
+    pub fn add(&mut self, name: String, text: String) -> u32 {
+        let base = self.next;
+        // +1 for the separator; saturating so a pathological unit degrades to
+        // overlapping spans in a diagnostic rather than a panic.
+        self.next = base.saturating_add(text.len() as u32).saturating_add(1);
+        self.files.push(SourceFile::new(name, text));
+        self.bases.push(base);
+        base
+    }
+
+    pub fn files(&self) -> &[SourceFile] {
+        &self.files
+    }
+
+    /// The file an offset falls in, and where in it.
+    ///
+    /// Returns `None` only for an empty map, which means nothing was compiled
+    /// and so nothing can have produced a span.
+    pub fn resolve(&self, offset: u32) -> Option<(&SourceFile, LineColumn)> {
+        let i = self
+            .bases
+            .partition_point(|&b| b <= offset)
+            .checked_sub(1)?;
+        let file = &self.files[i];
+        // Clamped: the separator byte belongs to no file, and an offset landing
+        // on it should point at the end of the file before it rather than past
+        // the end of its text.
+        let local = (offset - self.bases[i]).min(file.text().len() as u32);
+        Some((file, file.line_column(local)))
+    }
+}
+
 impl SourceFile {
     pub fn new(name: String, text: String) -> Self {
         let line_starts = Self::compute_line_starts(&text);

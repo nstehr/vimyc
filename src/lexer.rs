@@ -9,7 +9,17 @@ use crate::diag::{Diagnostic, Span};
 use crate::token::{Token, TokenKind};
 
 pub fn lex(source: &str) -> (Vec<Token>, Vec<Diagnostic>) {
-    Lexer::new(source).run()
+    lex_at(source, 0)
+}
+
+/// Lexes one file of a multi-file unit, with every span shifted into the
+/// unit-wide coordinate space `SourceMap` resolves against.
+///
+/// The offset is applied here rather than by walking the tokens afterwards
+/// because a diagnostic is not a token, and one of the two would have been
+/// forgotten.
+pub fn lex_at(source: &str, base: u32) -> (Vec<Token>, Vec<Diagnostic>) {
+    Lexer::new(source, base).run()
 }
 
 /// Borrows the source: a `Lexer` is dropped before `lex` returns. `SourceFile`
@@ -17,6 +27,8 @@ pub fn lex(source: &str) -> (Vec<Token>, Vec<Diagnostic>) {
 struct Lexer<'a> {
     src: &'a str,
     bytes: &'a [u8],
+    /// Where this file starts in the unit. Zero for a single-file compile.
+    base: u32,
     /// Byte offset of the token being scanned.
     start: usize,
     /// Byte offset of the next unconsumed byte.
@@ -26,10 +38,11 @@ struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
-    fn new(src: &'a str) -> Self {
+    fn new(src: &'a str, base: u32) -> Self {
         Lexer {
             src,
             bytes: src.as_bytes(),
+            base,
             start: 0,
             pos: 0,
             tokens: Vec::new(),
@@ -226,24 +239,22 @@ impl<'a> Lexer<'a> {
 
     /// Pushes a token spanning `self.start..self.pos`.
     fn push(&mut self, kind: TokenKind) {
-        self.tokens.push(Token {
-            kind,
-            span: Span {
-                start: self.start as u32,
-                end: self.pos as u32,
-            },
-        });
+        let span = self.span();
+        self.tokens.push(Token { kind, span });
+    }
+
+    /// The token being scanned, in unit coordinates.
+    fn span(&self) -> Span {
+        Span {
+            start: self.base + self.start as u32,
+            end: self.base + self.pos as u32,
+        }
     }
 
     /// Records a diagnostic spanning `self.start..self.pos`.
     fn error(&mut self, message: String) {
-        self.diags.push(Diagnostic::error(
-            Span {
-                start: self.start as u32,
-                end: self.pos as u32,
-            },
-            message,
-        ));
+        let span = self.span();
+        self.diags.push(Diagnostic::error(span, message));
     }
 }
 
