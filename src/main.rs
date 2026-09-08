@@ -1,5 +1,6 @@
 //! CLI: check a rule set, optionally evaluate it against a state, or emit the
 //! build artifact Vimy embeds. `docs/implementation.md` has the rest.
+use std::cmp::Reverse;
 use std::env;
 use std::path::PathBuf;
 use vimyc::check::check;
@@ -17,6 +18,7 @@ fn main() {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     const USAGE: &str = "usage: vimyc <input>... [state.json] [--json|--vy] \
+                         [--params <file>|-]\n       vimyc <input>... --blame <states.json> \
                          [--params <file>|-]\n       vimyc --tokens\n\n\
                          An input is a .vy file or a directory of them; several \
                          make one rule set.";
@@ -27,6 +29,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut emit_vy = false;
     let mut list_tokens = false;
     let mut params_path: Option<String> = None;
+    let mut blame_path: Option<String> = None;
     let mut positional: Vec<String> = Vec::new();
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -40,6 +43,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             // fall behind it.
             "--tokens" => list_tokens = true,
             // A flat object of parameter name to number.
+            // Replay recorded states and report what stopped each rule.
+            "--blame" => {
+                blame_path = Some(
+                    args.next()
+                        .ok_or(format!("--blame needs a states file\n{USAGE}"))?,
+                )
+            }
             "--params" => {
                 params_path = Some(
                     args.next()
@@ -111,7 +121,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // before binding rather than failing on the first unbound parameter. What
     // this cannot report is the warnings that compare priorities — a priority
     // is not a number until a doctrine sets it — so those need `--params`.
-    if params_path.is_none() && !emit_json && !emit_vy && state_path.is_none() {
+    if params_path.is_none()
+        && !emit_json
+        && !emit_vy
+        && state_path.is_none()
+        && blame_path.is_none()
+    {
         return Ok(());
     }
 
@@ -138,6 +153,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // After specialising: these compare priorities, and a doctrine-set priority
     // is not a number until now.
     report(&src, &vimyc::specialise::validate(&checked.ir, &params));
+
+    if let Some(path) = blame_path {
+        let json = std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
+        let states = read_states(&json).map_err(|e| format!("{path}: {e}"))?;
+        if states.is_empty() {
+            return Err(format!("{path}: no states").into());
+        }
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&blame_report(&checked.ir, &params, &states, &src))?
+        );
+        return Ok(());
+    }
 
     if emit_vy {
         println!("{}", vimyc::emit::vy::emit_file(&checked.ir, &params));
@@ -169,6 +197,97 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+/// Reads either a bare array of states or a state export, which wraps them.
+///
+/// Both shapes exist in the wild — the differential corpus writes the wrapper,
+/// a hand-made fixture is usually the bare array — and guessing between them is
+/// cheaper than making every caller unwrap.
+fn read_states(json: &str) -> Result<Vec<State>, serde_json::Error> {
+    #[derive(serde::Deserialize)]
+    struct Export {
+        states: Vec<State>,
+    }
+    match serde_json::from_str::<Export>(json) {
+        Ok(e) => Ok(e.states),
+        Err(_) => serde_json::from_str::<Vec<State>>(json),
+    }
+}
+
+/// `analysis::blame`, with each clause resolved back to the line that wrote it.
+///
+/// The span is the whole point: a count of blocked ticks is a curiosity, and
+/// `economy.vy:88  require cash >= 600` is something to go and change.
+fn blame_report(
+    ir: &vimyc::ir::Ir,
+    params: &vimyc::ir::ParamValues,
+    states: &[State],
+    src: &SourceMap,
+) -> serde_json::Value {
+    use serde_json::json;
+    let mut rules: Vec<serde_json::Value> = vimyc::analysis::blame(ir, params, states)
+        .into_iter()
+        .map(|b| {
+            let clauses: Vec<serde_json::Value> = b
+                .clauses
+                .iter()
+                .map(|c| {
+                    let (file, line, text) = match src.resolve(c.span.start) {
+                        Some((f, lc)) => (
+                            f.name.clone(),
+                            lc.line,
+                            f.line_text(lc.line).trim().to_string(),
+                        ),
+                        None => (String::new(), 0, String::new()),
+                    };
+                    json!({
+                        "index": c.index, "blocked": c.blocked, "sole": c.sole,
+                        "file": file, "line": line, "source": text,
+                    })
+                })
+                .collect();
+            let culprit = b.culprit().map(|c| c.index);
+            json!({
+                "rule": b.rule, "category": b.category, "action": b.action, "seen": b.seen, "held": b.held,
+                "preempted": b.preempted, "blocked": b.blocked(),
+                "culprit": culprit, "clauses": clauses,
+            })
+        })
+        .collect();
+    // Never fired first, then most blocked: the order someone reads in.
+    rules.sort_by_key(|r| {
+        let held = r["held"].as_u64().unwrap_or(0);
+        let blocked = r["blocked"].as_u64().unwrap_or(0);
+        (held > 0, Reverse(blocked))
+    });
+    // Thresholds are separate from rules because a gate is a property of a
+    // line, not of the rule that happens to contain it: the same `cash >= 600`
+    // inlined into six rules is one number to tune.
+    let mut gates: Vec<serde_json::Value> = vimyc::analysis::thresholds(ir, params, states)
+        .into_iter()
+        .map(|t| {
+            let (file, line, text) = match src.resolve(t.span.start) {
+                Some((f, lc)) => (
+                    f.name.clone(),
+                    lc.line,
+                    f.line_text(lc.line).trim().to_string(),
+                ),
+                None => (String::new(), 0, String::new()),
+            };
+            json!({
+                "rule": t.rule, "clause": t.clause,
+                "file": file, "line": line, "source": text,
+                "op": format!("{:?}", t.op), "at": t.at,
+                "blocked": t.blocked, "reached": t.reached, "floor": t.floor,
+                "curve": t.curve.iter().map(|(v, n)| json!({"at": v, "blocked": n}))
+                    .collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    gates.sort_by_key(|g| Reverse(g["blocked"].as_u64().unwrap_or(0)));
+
+    json!({ "states": states.len(), "rules": rules, "thresholds": gates })
 }
 
 fn report(src: &SourceMap, diags: &[Diagnostic]) {

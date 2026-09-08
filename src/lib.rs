@@ -11,6 +11,7 @@
 //! Design decisions live in `docs/design.md`; how it is put together, and the
 //! decisions that are expensive to reverse, in `docs/implementation.md`.
 
+pub mod analysis;
 pub mod ast;
 pub mod check;
 pub mod diag;

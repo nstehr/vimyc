@@ -161,6 +161,14 @@ pub fn rule_fires(rule: &IrRule, params: &ParamValues, state: &State) -> bool {
     true
 }
 
+/// One subexpression's value, in the scope of the rule it belongs to.
+///
+/// For analysis rather than evaluation: measuring what a threshold is compared
+/// against means evaluating one side of a comparison on its own.
+pub fn value_of(rule: &IrRule, params: &ParamValues, state: &State, e: &IrExpr) -> Value {
+    Evaluator::for_rule(rule, params, state).eval(e)
+}
+
 /// Whether each `require` holds, evaluated independently.
 ///
 /// Deliberately does **not** short-circuit: this measures which conjuncts a

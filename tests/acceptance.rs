@@ -38,78 +38,228 @@ struct GoRule {
 /// frozen corpus is that an unexpected rule is still an error.
 const POST_PORT: &[&str] = &["form-harvester-guard", "guard-harvesters"];
 
-/// Rules whose priority was deliberately changed after the port, and the reason.
+/// Which field of a rule is allowed to differ from the corpus.
 ///
-/// Every one of these is a tie broken on purpose: Go gave two rules in one
-/// exclusive category the same priority, so which of them got the queue was
-/// decided by an unstable sort. Only the priority is exempted — the condition,
-/// category, action and exclusivity are still held against the corpus, so this
-/// cannot quietly hide a rule that drifted in some other way.
-const RETUNED: &[(&str, &str)] = &[
+/// Per field rather than per rule: a deliberate change to a priority says
+/// nothing about the condition, and exempting the whole rule would hide the
+/// difference between "we retuned this" and "this drifted".
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum Field {
+    Priority,
+    Condition,
+}
+
+/// Rules deliberately changed after the port, what changed, and why.
+///
+/// Everything not named here is still held against Go — including the other
+/// fields of these same rules — so an entry cannot quietly hide a rule that
+/// drifted somewhere else.
+const RETUNED: &[(&str, Field, &str)] = &[
+    (
+        "squad-attack",
+        Field::Condition,
+        "a live ground-defence squad satisfies the base-defence floor: Go \
+         counted only static defences, so a doctrine that under-built them \
+         could never attack at all while its army watched visible enemies",
+    ),
+    (
+        "squad-attack-known-base",
+        Field::Condition,
+        "a live ground-defence squad satisfies the base-defence floor, as for \
+         squad-attack",
+    ),
+    (
+        "form-defense-squad",
+        Field::Condition,
+        "no surplus clause: Go also demanded enough spare units for an attack \
+         squad on top of the defence squad's own size, which needed a pool of \
+         eight and so only formed once the base was already under attack",
+    ),
+    (
+        "scout-with-idle-units",
+        Field::Condition,
+        "two idle units rather than a whole attack group: the action sends at \
+         most two, and Go's bar of six to ten meant nothing scouted until the \
+         second half of the game",
+    ),
     (
         "build-aa-defense",
+        Field::Priority,
         "below base defense when the doctrine weights air and ground equally",
     ),
     (
         "build-extra-refinery",
+        Field::Priority,
         "above the tech centre when economy and tech are weighted equally",
     ),
     (
         "build-gap-generator",
+        Field::Priority,
         "below both other defenses; it is the least urgent of the three",
     ),
     (
         "build-naval-yard",
+        Field::Priority,
         "below the airfield when air and naval are weighted equally",
     ),
     (
         "build-second-refinery",
+        Field::Priority,
         "above the tech centre when economy and tech are weighted equally",
     ),
     (
         "build-service-depot",
+        Field::Priority,
         "below the radar, which is the tech gate",
     ),
     (
         "build-tesla-coil-for-shock-trooper",
+        Field::Priority,
         "below the flame tower, the cheaper unlock",
     ),
     (
         "defend-base",
+        Field::Priority,
         "above the scramble it duplicates, being the more specific rule",
     ),
     (
         "produce-apc",
+        Field::Priority,
         "above the flak truck; an engineer is already built and waiting",
     ),
     (
         "produce-assault-apc",
+        Field::Priority,
         "above the vehicle rules, being capped and doctrine-opted-in",
     ),
     (
         "produce-attack-dog",
+        Field::Priority,
         "below specialist infantry when the doctrine puts specialists first",
     ),
     (
         "produce-bridge-infantry",
+        Field::Priority,
         "below the rocket soldier; rifle top-ups are the more disposable",
     ),
     (
         "produce-spy",
+        Field::Priority,
         "below capture-defense rifles, which are cheaper and defensive",
     ),
     (
         "recall-overextended-naval-attack",
+        Field::Priority,
         "below its ground mirror",
     ),
     (
         "rebuild-naval-yard",
+        Field::Priority,
         "below the airfield, which is useful on every map",
     ),
-    ("squad-disengage-naval-attack", "below its ground mirror"),
+    (
+        "squad-disengage-naval-attack",
+        Field::Priority,
+        "below its ground mirror",
+    ),
     (
         "squad-focus-fire",
+        Field::Priority,
         "capped below the retreat band, so retreating outranks it",
+    ),
+    (
+        "squad-attack-known-base",
+        Field::Priority,
+        "the aggression threshold that chooses between pressing the base and \
+         engaging what is visible sat at 0.3, below anything the strategist \
+         ever chose, so this rule always won and `squad-attack` never fired in \
+         eighty games",
+    ),
+    (
+        "produce-extra-harvester",
+        Field::Condition,
+        "cash floor 1400 -> 600: at 1400 it fired 72 times in 77 games, against a p90 cash of ~1100",
+    ),
+    (
+        "rebuild-harvester",
+        Field::Condition,
+        "replaces against the refinery count rather than waiting for the last harvester to die",
+    ),
+    // `reserves()` went from `cost + N` to `cost + min(cost * k, N)`. A flat
+    // sum taxed a 100-credit rifleman elevenfold and a 2,000-credit tank twice,
+    // so the cheap escorts that make any plan work were the worst-hit line in
+    // the ledger. The reserve is now proportional up to the old cap, which
+    // leaves anything at or above the cap exactly where it was — only the cheap
+    // end moves, which is the end that was wrong.
+    (
+        "produce-assault-apc",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-attack-dog",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-grenadier",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-infantry",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-rocket-soldier",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-scout-vehicle",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-specialist-infantry",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-spy",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-aircraft",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-bridge-infantry",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-flak-truck",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-minelayer",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-gunboat",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-ship",
+        Field::Condition,
+        "reserve is a multiple of the unit's price, not a flat sum added to it",
     ),
 ];
 
@@ -305,8 +455,8 @@ fn block_matches_go(file: Option<&str>) {
                 continue;
             };
             compared += 1;
-            let retuned = RETUNED.iter().any(|(n, _)| *n == r.name);
-            let mismatch = if r.priority != want.priority && !retuned {
+            let retuned = |f: Field| RETUNED.iter().any(|(n, d, _)| *n == r.name && *d == f);
+            let mismatch = if r.priority != want.priority && !retuned(Field::Priority) {
                 Some(format!("priority {} vs {}", r.priority, want.priority))
             } else if r.category != want.category {
                 Some(format!("category {} vs {}", r.category, want.category))
@@ -314,7 +464,9 @@ fn block_matches_go(file: Option<&str>) {
                 Some(format!("exclusive {} vs {}", r.exclusive, want.exclusive))
             } else if r.action != want.action {
                 Some(format!("action {} vs {}", r.action, want.action))
-            } else if normalise(&r.condition) != normalise(&want.condition) {
+            } else if normalise(&r.condition) != normalise(&want.condition)
+                && !retuned(Field::Condition)
+            {
                 Some(format!(
                     "condition\n      go:    {}\n      vimyc: {}",
                     want.condition, r.condition
@@ -367,11 +519,11 @@ fn the_combined_rule_set_matches_go() {
     block_matches_go(None);
 }
 
-/// Every `RETUNED` entry names a real rule that really does differ.
+/// Every `RETUNED` entry names a real rule whose named field really does differ.
 ///
 /// Without this the list only ever grows: an entry for a rule that was deleted,
-/// or one whose priority was later put back, would sit there silently widening
-/// the hole in the comparison.
+/// or whose value was later put back, would sit there silently widening the hole
+/// in the comparison.
 #[test]
 fn every_retuned_rule_exists_and_still_differs() {
     let Some(cases) = corpus() else {
@@ -385,13 +537,13 @@ fn every_retuned_rule_exists_and_still_differs() {
     let ast = rule_set(&dir).ast;
 
     let names: HashSet<&str> = ast.rules.iter().map(|r| r.name.text.as_str()).collect();
-    for (n, _) in RETUNED {
+    for (n, _, _) in RETUNED {
         assert!(names.contains(n), "`{n}` is retuned but no longer exists");
     }
 
-    // A rule is only exempt if some doctrine actually gives it a different
-    // priority from the one Go recorded.
-    let mut differs: HashSet<&str> = HashSet::new();
+    // An entry only earns its exemption if some doctrine really does produce a
+    // different value from the one Go recorded, in the field it names.
+    let mut differs: HashSet<(&str, Field)> = HashSet::new();
     for case in cases.iter().step_by(7) {
         let mut ir = vimyc::check::check(&ast).expect("checks").ir;
         let params = vimyc::ir::ParamValues::bind(&ir, &case.params).expect("binds");
@@ -402,18 +554,27 @@ fn every_retuned_rule_exists_and_still_differs() {
             unreachable!()
         };
         for r in &mine {
-            if let Some(want) = case.rules.iter().find(|g| g.name == r.name)
-                && r.priority != want.priority
-                && let Some((n, _)) = RETUNED.iter().find(|(n, _)| *n == r.name)
-            {
-                differs.insert(n);
+            let Some(want) = case.rules.iter().find(|g| g.name == r.name) else {
+                continue;
+            };
+            for (n, field, _) in RETUNED {
+                if *n != r.name {
+                    continue;
+                }
+                let changed = match field {
+                    Field::Priority => r.priority != want.priority,
+                    Field::Condition => normalise(&r.condition) != normalise(&want.condition),
+                };
+                if changed {
+                    differs.insert((*n, *field));
+                }
             }
         }
     }
-    let stale: Vec<&str> = RETUNED
+    let stale: Vec<(&str, Field)> = RETUNED
         .iter()
-        .map(|(n, _)| *n)
-        .filter(|n| !differs.contains(n))
+        .map(|(n, f, _)| (*n, *f))
+        .filter(|k| !differs.contains(k))
         .collect();
     assert!(
         stale.is_empty(),
