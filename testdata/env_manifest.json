@@ -658,47 +658,11 @@
     ],
     "used": true,
     "keys": [
-      "damaged-combat-units(0.17)",
-      "damaged-combat-units(0.18)",
-      "damaged-combat-units(0.19)",
-      "damaged-combat-units(0.2)",
-      "damaged-combat-units(0.22)",
-      "damaged-combat-units(0.23)",
-      "damaged-combat-units(0.24)",
-      "damaged-combat-units(0.25)",
-      "damaged-combat-units(0.26)",
-      "damaged-combat-units(0.27)",
-      "damaged-combat-units(0.29)",
-      "damaged-combat-units(0.31)",
-      "damaged-combat-units(0.33)",
-      "damaged-combat-units(0.34)",
-      "damaged-combat-units(0.36)",
-      "damaged-combat-units(0.41)",
-      "damaged-combat-units(0.43)",
-      "damaged-combat-units(0.45)",
-      "damaged-combat-units(0.46)"
+      "damaged-combat-units(0.19)"
     ],
     "literals": [
       [
-        "0.17",
-        "0.18",
-        "0.19",
-        "0.20",
-        "0.22",
-        "0.23",
-        "0.24",
-        "0.25",
-        "0.26",
-        "0.27",
-        "0.29",
-        "0.31",
-        "0.33",
-        "0.34",
-        "0.36",
-        "0.41",
-        "0.43",
-        "0.45",
-        "0.46"
+        "0.19"
       ]
     ]
   },
@@ -791,18 +755,10 @@
     ],
     "used": true,
     "keys": [
-      "harvesters-in-danger(0.1)",
-      "harvesters-in-danger(0.11)",
-      "harvesters-in-danger(0.12)",
-      "harvesters-in-danger(0.13)",
       "harvesters-in-danger(0.14)"
     ],
     "literals": [
       [
-        "0.10",
-        "0.11",
-        "0.12",
-        "0.13",
         "0.14"
       ]
     ]
@@ -880,7 +836,6 @@
       "has-role(airfield)",
       "has-role(barracks)",
       "has-role(construction-yard)",
-      "has-role(flame-tower)",
       "has-role(iron-curtain)",
       "has-role(kennel)",
       "has-role(missile-silo)",
@@ -890,7 +845,6 @@
       "has-role(refinery)",
       "has-role(service-depot)",
       "has-role(tech-center)",
-      "has-role(tesla-coil)",
       "has-role(war-factory)"
     ],
     "literals": [
@@ -898,7 +852,6 @@
         "airfield",
         "barracks",
         "construction-yard",
-        "flame-tower",
         "iron-curtain",
         "kennel",
         "missile-silo",
@@ -908,7 +861,6 @@
         "refinery",
         "service-depot",
         "tech-center",
-        "tesla-coil",
         "war-factory"
       ]
     ]
@@ -1139,6 +1091,18 @@
     "used": true,
     "keys": [
       "idle-scouts"
+    ]
+  },
+  {
+    "name": "IncomeRate",
+    "kebab": "income-rate",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": true,
+    "keys": [
+      "income-rate"
     ]
   },
   {
@@ -1390,44 +1354,8 @@
     ],
     "used": true,
     "keys": [
-      "overextended-squad-members(ground-attack,0.28)",
-      "overextended-squad-members(ground-attack,0.29)",
-      "overextended-squad-members(ground-attack,0.3)",
-      "overextended-squad-members(ground-attack,0.31)",
-      "overextended-squad-members(ground-attack,0.35)",
-      "overextended-squad-members(ground-attack,0.36)",
-      "overextended-squad-members(ground-attack,0.37)",
-      "overextended-squad-members(ground-attack,0.38)",
-      "overextended-squad-members(ground-attack,0.39)",
-      "overextended-squad-members(ground-attack,0.4)",
-      "overextended-squad-members(ground-attack,0.41)",
-      "overextended-squad-members(ground-attack,0.42)",
-      "overextended-squad-members(ground-attack,0.43)",
-      "overextended-squad-members(ground-attack,0.44)",
-      "overextended-squad-members(ground-attack,0.45)",
-      "overextended-squad-members(ground-attack,0.46)",
       "overextended-squad-members(ground-attack,0.47)",
-      "overextended-squad-members(ground-attack,0.48)",
-      "overextended-squad-members(ground-attack,0.49)",
-      "overextended-squad-members(naval-attack,0.28)",
-      "overextended-squad-members(naval-attack,0.29)",
-      "overextended-squad-members(naval-attack,0.3)",
-      "overextended-squad-members(naval-attack,0.31)",
-      "overextended-squad-members(naval-attack,0.35)",
-      "overextended-squad-members(naval-attack,0.36)",
-      "overextended-squad-members(naval-attack,0.37)",
-      "overextended-squad-members(naval-attack,0.38)",
-      "overextended-squad-members(naval-attack,0.39)",
-      "overextended-squad-members(naval-attack,0.4)",
-      "overextended-squad-members(naval-attack,0.41)",
-      "overextended-squad-members(naval-attack,0.42)",
-      "overextended-squad-members(naval-attack,0.43)",
-      "overextended-squad-members(naval-attack,0.44)",
-      "overextended-squad-members(naval-attack,0.45)",
-      "overextended-squad-members(naval-attack,0.46)",
-      "overextended-squad-members(naval-attack,0.47)",
-      "overextended-squad-members(naval-attack,0.48)",
-      "overextended-squad-members(naval-attack,0.49)"
+      "overextended-squad-members(naval-attack,0.47)"
     ],
     "literals": [
       [
@@ -1435,25 +1363,7 @@
         "naval-attack"
       ],
       [
-        "0.28",
-        "0.29",
-        "0.30",
-        "0.31",
-        "0.35",
-        "0.36",
-        "0.37",
-        "0.38",
-        "0.39",
-        "0.40",
-        "0.41",
-        "0.42",
-        "0.43",
-        "0.44",
-        "0.45",
-        "0.46",
-        "0.47",
-        "0.48",
-        "0.49"
+        "0.47"
       ]
     ]
   },
@@ -1610,6 +1520,7 @@
       "role-count(medium-tank)",
       "role-count(minelayer)",
       "role-count(missile-sub)",
+      "role-count(naval-yard)",
       "role-count(ore-silo)",
       "role-count(pillbox)",
       "role-count(power-plant)",
@@ -1645,6 +1556,7 @@
         "medium-tank",
         "minelayer",
         "missile-sub",
+        "naval-yard",
         "ore-silo",
         "pillbox",
         "power-plant",
@@ -1741,7 +1653,7 @@
         "naval-attack"
       ],
       [
-        "0.10"
+        "0.1"
       ]
     ]
   },
@@ -1787,13 +1699,14 @@
       "bool"
     ],
     "domains": [
-      "squad"
+      ""
     ],
     "used": true,
     "keys": [
       "squad-exists(air-attack)",
       "squad-exists(ground-attack)",
       "squad-exists(ground-defense)",
+      "squad-exists(harvester-guard)",
       "squad-exists(naval-attack)"
     ],
     "literals": [
@@ -1801,6 +1714,7 @@
         "air-attack",
         "ground-attack",
         "ground-defense",
+        "harvester-guard",
         "naval-attack"
       ]
     ]
@@ -1849,13 +1763,14 @@
       "bool"
     ],
     "domains": [
-      "squad"
+      ""
     ],
     "used": true,
     "keys": [
       "squad-needs-reinforcement(air-attack)",
       "squad-needs-reinforcement(ground-attack)",
       "squad-needs-reinforcement(ground-defense)",
+      "squad-needs-reinforcement(harvester-guard)",
       "squad-needs-reinforcement(naval-attack)"
     ],
     "literals": [
@@ -1863,6 +1778,7 @@
         "air-attack",
         "ground-attack",
         "ground-defense",
+        "harvester-guard",
         "naval-attack"
       ]
     ]
@@ -1950,7 +1866,7 @@
         "naval-attack"
       ],
       [
-        "0.10"
+        "0.1"
       ]
     ]
   },

@@ -116,6 +116,26 @@ const RETUNED: &[(&str, Field, &str)] = &[
         "above the tech centre when economy and tech are weighted equally",
     ),
     (
+        "build-base-defense",
+        Field::Condition,
+        "affordable() now holds a reserve for whichever tech gate is still \
+         missing, released the moment net cash turns positive. Go's version \
+         reserved only for the radar. Defenses are the rules that outspent it: \
+         game 72 sampled thirty-three tesla coils against no radar at all",
+    ),
+    (
+        "build-aa-defense",
+        Field::Condition,
+        "affordable() reserves for the missing tech gate, as for \
+         build-base-defense",
+    ),
+    (
+        "build-gap-generator",
+        Field::Condition,
+        "affordable() reserves for the missing tech gate, as for \
+         build-base-defense",
+    ),
+    (
         "build-service-depot",
         Field::Priority,
         "ABOVE the radar when the doctrine wants vehicles — the reverse of Go, \
