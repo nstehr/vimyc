@@ -242,7 +242,12 @@ const RETUNED: &[(&str, Field, &str)] = &[
     (
         "produce-infantry",
         Field::Condition,
-        "reserve is a multiple of the unit's price, not a flat sum added to it",
+        "reserve is a multiple of the unit's price, not a flat sum added to it; \
+         and since 2026-09-08 it also holds while a war factory stands with no \
+         combat vehicle beside it and no cash for one. Go released the hold as \
+         soon as a factory existed, which is precisely when saving for vehicles \
+         starts to matter: game 86 bought 72 infantry and 3 vehicles, with a \
+         median of one tank and a maximum of two",
     ),
     (
         "produce-rocket-soldier",
