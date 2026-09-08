@@ -56,6 +56,14 @@ enum Field {
 /// drifted somewhere else.
 const RETUNED: &[(&str, Field, &str)] = &[
     (
+        "build-airfield",
+        Field::Condition,
+        "holds while the war factory is unaffordable: an exclusive category \
+         picks the highest-priority rule whose condition HOLDS, so Go's cash \
+         gate kept the dearer war factory out of the running entirely and the \
+         category built cheapest-first, against its own priority numbers",
+    ),
+    (
         "squad-attack",
         Field::Condition,
         "a live ground-defence squad satisfies the base-defence floor: Go \
