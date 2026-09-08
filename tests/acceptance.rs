@@ -118,7 +118,12 @@ const RETUNED: &[(&str, Field, &str)] = &[
     (
         "build-service-depot",
         Field::Priority,
-        "below the radar, which is the tech gate",
+        "ABOVE the radar when the doctrine wants vehicles — the reverse of Go, \
+         and of what this exemption said until 2026-09-08. fix is the \
+         prerequisite for the medium tank, the heavy tank and the mammoth, so \
+         without one the only armour either side can field is the Allied light \
+         tank; game 84 never built one and fought six tesla tanks with light \
+         tanks and artillery",
     ),
     (
         "build-tesla-coil-for-shock-trooper",
