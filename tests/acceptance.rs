@@ -231,7 +231,12 @@ const RETUNED: &[(&str, Field, &str)] = &[
          per refinery rather than one: Go's `< refineries + 1` let this rule \
          act exactly ONCE in each of games 85, 86 and 87, which held the \
          economy at four refineries and five harvesters in all three, with \
-         median cash ~350 and a median income rate of zero",
+         median cash ~350 and a median income rate of zero. It then yields \
+         past one harvester per refinery until two combat vehicles exist: the \
+         mod gives a player ONE Vehicle queue however many war factories it \
+         builds, this rule outranks every combat-vehicle rule in that shared \
+         exclusive category by design, and doubling the cap therefore bought \
+         income by spending the army's queue time",
     ),
     (
         "rebuild-harvester",
