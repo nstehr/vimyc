@@ -1,22 +1,20 @@
 //! Why a rule did not fire, counted over a recorded game.
 //!
-//! The compiler is the only place this can be answered. By the time a rule
-//! reaches the engine its condition is one flattened conjunction, but `IrRule`
-//! still holds `requires` as separate expressions, each with the span of the
-//! line an author wrote. So a count of "this rule never fired" can be turned
-//! into "and it was this `require`, on this line, that stopped it".
+//! Only the compiler can answer this. The engine sees one flattened conjunction,
+//! but `IrRule` still holds `requires` as separate expressions carrying the span
+//! of the line an author wrote — so "never fired" becomes "this `require`, on
+//! this line, stopped it".
 //!
-//! Three counts per rule, because they answer different questions:
+//! Three counts per rule:
 //!
-//! - `held` — the condition was satisfiable. What the rule managed.
-//! - `preempted` — an exclusive rule already claimed the category this tick, so
-//!   the rule was never evaluated. Not the rule's fault; a contest it lost.
+//! - `held` — the condition was satisfiable.
+//! - `preempted` — an exclusive rule claimed the category first, so this one was
+//!   never evaluated. A contest lost, not a fault.
 //! - per-clause `blocked` / `sole` — which requirement was false, and how often
-//!   it was the *only* false one.
+//!   it was the only false one.
 //!
-//! `sole` is the actionable number. A clause that is merely one of several
-//! failing is not what to fix; a clause that stands alone between a rule and
-//! firing is exactly what to fix.
+//! `sole` is the actionable number: a clause failing alongside others is not
+//! what to fix, one standing alone between a rule and firing is.
 
 use crate::diag::Span;
 use crate::eval::{conjuncts, priority, rule_fires};

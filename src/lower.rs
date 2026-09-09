@@ -10,10 +10,6 @@ use crate::env::{self, Predicate};
 use crate::ir::{ActionId, CategoryId, Ir, IrAction, IrExpr, IrExprKind, IrParam, IrRule};
 use crate::types::{Domain, ParamType, Type};
 
-/// Lowers a checked rule set.
-///
-/// Crate-private and reachable only through `check`, which is what makes the
-/// panics below sound rather than optimistic.
 /// Substitutes a `def`'s arguments into its body.
 ///
 /// At the AST, so the call site becomes an ordinary expression lowered in the
@@ -50,6 +46,10 @@ fn inline(def: &crate::ast::Def, args: &[Expr]) -> Expr {
     subst(&def.body, &bound)
 }
 
+/// Lowers a checked rule set.
+///
+/// Crate-private and reachable only through `check`, which is what makes the
+/// panics in this module sound rather than optimistic.
 pub(crate) fn lower(ast: &Ast) -> Ir {
     let params: Vec<IrParam> = ast
         .params

@@ -47,6 +47,10 @@ const POST_PORT: &[&str] = &["form-harvester-guard", "guard-harvesters"];
 enum Field {
     Priority,
     Condition,
+    /// vimyc emits the rule for doctrines where Go did not. A retune that
+    /// widens a gate changes which doctrines a rule appears in at all, not just
+    /// what it says, and that is as deliberate as any other divergence.
+    Presence,
 }
 
 /// Rules deliberately changed after the port, what changed, and why.
@@ -55,6 +59,17 @@ enum Field {
 /// fields of these same rules — so an entry cannot quietly hide a rule that
 /// drifted somewhere else.
 const RETUNED: &[(&str, Field, &str)] = &[
+    (
+        "build-extra-war-factory",
+        Field::Presence,
+        "gate lowered from vehicle-weight > 0.6 to > 0.4, so it appears for \
+         doctrines Go excluded. One war factory serialises the entire ground \
+         army with the ore trucks — harvesters, artillery, jeeps and tanks all \
+         queue through it — and games 86-90 never fielded more than two combat \
+         vehicles at once, delivering six and losing six in game 90. Go's 0.6 \
+         was strictly above the highest weight the strategist chose in 106 of \
+         107 doctrine windows across games 88, 89 and 90",
+    ),
     (
         "build-airfield",
         Field::Condition,
@@ -494,7 +509,12 @@ fn block_matches_go(file: Option<&str>) {
                 continue;
             }
             let Some(want) = theirs.get(r.name.as_str()) else {
-                differ.push(format!("doctrine {i}: emitted `{}`, Go did not", r.name));
+                if !RETUNED
+                    .iter()
+                    .any(|(n, d, _)| *n == r.name && *d == Field::Presence)
+                {
+                    differ.push(format!("doctrine {i}: emitted `{}`, Go did not", r.name));
+                }
                 continue;
             };
             compared += 1;
@@ -597,16 +617,22 @@ fn every_retuned_rule_exists_and_still_differs() {
             unreachable!()
         };
         for r in &mine {
-            let Some(want) = case.rules.iter().find(|g| g.name == r.name) else {
-                continue;
-            };
+            // Not `continue` on a missing Go rule: a rule Go never emitted for
+            // this doctrine is exactly what a Presence entry claims, so it has
+            // to be able to prove itself here.
+            let want = case.rules.iter().find(|g| g.name == r.name);
             for (n, field, _) in RETUNED {
                 if *n != r.name {
                     continue;
                 }
-                let changed = match field {
-                    Field::Priority => r.priority != want.priority,
-                    Field::Condition => normalise(&r.condition) != normalise(&want.condition),
+                let changed = match (field, want) {
+                    (Field::Presence, None) => true,
+                    (Field::Presence, Some(_)) => false,
+                    (_, None) => false,
+                    (Field::Priority, Some(w)) => r.priority != w.priority,
+                    (Field::Condition, Some(w)) => {
+                        normalise(&r.condition) != normalise(&w.condition)
+                    }
                 };
                 if changed {
                     differs.insert((*n, *field));

@@ -1,14 +1,12 @@
 //! Printing the IR back as `.vy`.
 //!
-//! Not a formatter: this prints the rule set *after* lowering and specialising,
-//! so numbers are folded, gates the doctrine settled are gone, and `count(powr)`
-//! has become `building-count(powr)`. It is the `cargo expand` of this compiler
-//! — what the source became, for the doctrine that ran.
+//! Not a formatter: this prints the rule set *after* lowering and specialising —
+//! numbers folded, doctrine-settled gates gone, `count(powr)` now
+//! `building-count(powr)`. The `cargo expand` of this compiler.
 //!
-//! Which is what makes it the right thing to show a person. The dashboard used
-//! to render expr, so reading it meant translating back to the language the
-//! rules are written in; this closes that gap, and `emitted_vy_round_trips`
-//! makes "what you read is what runs" a property rather than a hope.
+//! Which makes it what the dashboard should show. It rendered expr before, so
+//! reading it meant translating back into the language the rules are written in.
+//! `emitted_vy_round_trips` keeps "what you read is what runs" a property.
 
 use crate::env;
 use crate::ir::{Ir, IrExpr, IrExprKind, IrRule, ParamValues};

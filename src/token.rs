@@ -129,14 +129,9 @@ impl TokenKind {
 mod tests {
     use super::TokenKind;
 
-    /// The list and the lookup are two spellings of one fact, and the list is
-    /// what the dashboard's highlighting is built from — so a keyword added to
-    /// one and not the other would show up as a word that stops being a keyword
-    /// on screen while still being one to the compiler.
-    /// The vocabulary the lexer will actually produce, against the tables that
-    /// describe it. Vimy's dashboard generates its syntax highlighting from
-    /// these, so a spelling missing here is a token that renders as plain text
-    /// while still compiling.
+    /// The vocabulary the lexer actually produces, against the tables that
+    /// describe it. The dashboard builds its highlighting from those tables, so
+    /// a spelling missing from them renders as plain text while still compiling.
     #[test]
     fn the_token_tables_cover_what_the_lexer_lexes() {
         use crate::lexer::lex;

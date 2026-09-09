@@ -349,9 +349,6 @@ impl<'a> Evaluator<'a> {
     }
 }
 
-/// The literal name of an argument in an enum position.
-///
-/// Panics on anything else, which the type checker has already ruled out.
 /// Arithmetic and comparison, shared by the two evaluators.
 ///
 /// Free rather than a method because it never needed `self`, and the static
@@ -451,6 +448,8 @@ fn key(name: &str, args: &[IrExpr], params: &ParamValues) -> String {
     crate::state::call_key(name, &rendered)
 }
 
+/// The literal name of an argument in an enum position. Panics on anything
+/// else, which the type checker has already ruled out.
 fn arg_name(e: &IrExpr) -> &str {
     match &e.kind {
         IrExprKind::Member(d, i) => env::member_name(*d, *i),
