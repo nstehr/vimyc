@@ -92,7 +92,13 @@ const RETUNED: &[(&str, Field, &str)] = &[
         Field::Condition,
         "two idle units rather than a whole attack group: the action sends at \
          most two, and Go's bar of six to ten meant nothing scouted until the \
-         second half of the game",
+         second half of the game. And since 2026-09-09 it stops once the enemy \
+         base is known: Go pulled combat units to patrol waypoints whenever no \
+         enemy was on screen, which is 44% of game 88's states and 34% of game \
+         90's while the base position was already known. A scattered unit is \
+         also not idle, so form-ground-attack cannot count it — scouting \
+         consumed the pool that massing needs. Game 93 dispatched scouts 112 \
+         times against 4 attacks",
     ),
     (
         "build-aa-defense",
