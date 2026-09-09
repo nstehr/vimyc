@@ -141,6 +141,19 @@ const RETUNED: &[(&str, Field, &str)] = &[
     ),
     (
         "build-service-depot",
+        Field::Presence,
+        "gate lowered from vehicle-weight > 0.3 to > 0.1, matching \
+         produce-vehicle, so it appears for doctrines Go excluded. The \
+         strategist swings vehicle_weight between 0.20 and 0.75 from one \
+         twenty-second window to the next — in game 92 a jump of 0.3 or more \
+         in ten of thirty windows — so a gate at 0.3 sat inside the swing and \
+         the rule kept being deleted from the rule set before it could save the \
+         1200 credits it needs. Present in 17 of game 92's 30 windows before, \
+         30 of 30 after; no service depot was ever built and no medium tank \
+         was ever available",
+    ),
+    (
+        "build-service-depot",
         Field::Priority,
         "ABOVE the radar when the doctrine wants vehicles — the reverse of Go, \
          and of what this exemption said until 2026-09-08. fix is the \
