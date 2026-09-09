@@ -60,17 +60,6 @@ enum Field {
 /// drifted somewhere else.
 const RETUNED: &[(&str, Field, &str)] = &[
     (
-        "build-extra-war-factory",
-        Field::Presence,
-        "gate lowered from vehicle-weight > 0.6 to > 0.4, so it appears for \
-         doctrines Go excluded. One war factory serialises the entire ground \
-         army with the ore trucks — harvesters, artillery, jeeps and tanks all \
-         queue through it — and games 86-90 never fielded more than two combat \
-         vehicles at once, delivering six and losing six in game 90. Go's 0.6 \
-         was strictly above the highest weight the strategist chose in 106 of \
-         107 doctrine windows across games 88, 89 and 90",
-    ),
-    (
         "build-airfield",
         Field::Condition,
         "holds while the war factory is unaffordable: an exclusive category \
