@@ -60,6 +60,17 @@ enum Field {
 /// drifted somewhere else.
 const RETUNED: &[(&str, Field, &str)] = &[
     (
+        "build-extra-airfield",
+        Field::Condition,
+        "will not produce a second pad while one is already in the queue. \
+         Construction is produce-then-place, and its cap reads aircraft-capacity \
+         — PLACED pads — so three could be produced before any of them landed \
+         and the cap was satisfied throughout. Game 99 built three helipads at \
+         an air_weight of 0.06 to 0.15, where the cap permits two: about 1500 \
+         credits in a game whose base defence could not afford 540. build-radar \
+         has carried this guard all along and nothing else did",
+    ),
+    (
         "build-airfield",
         Field::Condition,
         "holds while the war factory is unaffordable: an exclusive category \
