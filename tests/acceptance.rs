@@ -60,6 +60,76 @@ enum Field {
 /// drifted somewhere else.
 const RETUNED: &[(&str, Field, &str)] = &[
     (
+        "build-barracks",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-extra-refinery",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-extra-war-factory",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-ore-silo",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-refinery",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-second-refinery",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-service-depot",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-tech-center",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-war-factory",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-extra-barracks",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-iron-curtain",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-missile-silo",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-naval-yard",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
+        "build-extra-naval-yard",
+        Field::Condition,
+        "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
+    ),
+    (
         "build-extra-airfield",
         Field::Condition,
         "will not produce a second pad while one is already in the queue. \
