@@ -249,8 +249,12 @@ const RETUNED: &[(&str, Field, &str)] = &[
         "produce-extra-harvester",
         Field::Condition,
         "cash floor 1400 -> 600: at 1400 it fired 72 times in 77 games, against \
-         a p90 cash of ~1100. And since 2026-09-08 the cap is two harvesters \
-         per refinery rather than one: Go's `< refineries + 1` let this rule \
+         a p90 cash of ~1100. And the cap is `< refineries + 2` rather than \
+         Go's `< refineries + 1`. It was `refineries * 2` between 8 and 10 \
+         September, which put ten harvesters on the field; game 98 lost nine of \
+         them to raids, roughly 12,600 credits of replacements in a game where \
+         a 540-credit pillbox was unaffordable in 90% of states. Go's original \
+         let this rule \
          act exactly ONCE in each of games 85, 86 and 87, which held the \
          economy at four refineries and five harvesters in all three, with \
          median cash ~350 and a median income rate of zero. It then yields \
