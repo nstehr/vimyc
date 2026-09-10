@@ -146,6 +146,20 @@ const RETUNED: &[(&str, Field, &str)] = &[
          build-base-defense",
     ),
     (
+        "produce-siege-vehicle",
+        Field::Priority,
+        "outranks the general vehicle producer only when the doctrine puts \
+         siege FIRST. Go promoted it to 485 — above produce-vehicle's 480 in \
+         the same exclusive category — whenever artillery appeared ANYWHERE in \
+         preferred_vehicle, because prefers-artillery uses contains() while its \
+         siblings prefers-radar-gated-primary and specialist-infantry-first use \
+         head(). Game 96 listed medium_tank first and artillery second, and \
+         built arty 49, light tanks 20, medium tanks 0. It now reads \
+         siege-vehicle-first, which is head-based and already existed for the \
+         siege cap. prefers-artillery still raises the WAR FACTORY's priority: \
+         wanting artillery at all is a fine reason to want a factory sooner",
+    ),
+    (
         "build-service-depot",
         Field::Presence,
         "gate lowered from vehicle-weight > 0.3 to > 0.1, matching \
