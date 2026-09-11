@@ -362,14 +362,38 @@ const RETUNED: &[(&str, Field, &str)] = &[
         "reserve is a multiple of the unit's price, not a flat sum added to it",
     ),
     (
+        "produce-advanced-ship",
+        Field::Condition,
+        "the savings model also holds while an armour doctrine has a war \
+         factory and no service depot; see produce-vehicle",
+    ),
+    (
+        "produce-attack-aircraft",
+        Field::Condition,
+        "the savings model also holds while an armour doctrine has a war \
+         factory and no service depot; see produce-vehicle",
+    ),
+    (
         "produce-attack-dog",
         Field::Condition,
         "reserve is a multiple of the unit's price, not a flat sum added to it",
     ),
     (
+        "produce-basic-aircraft",
+        Field::Condition,
+        "the savings model also holds while an armour doctrine has a war \
+         factory and no service depot; see produce-vehicle",
+    ),
+    (
         "produce-grenadier",
         Field::Condition,
         "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-heavy-vehicle",
+        Field::Condition,
+        "the savings model also holds while an armour doctrine has a war \
+         factory and no service depot; see produce-vehicle",
     ),
     (
         "produce-infantry",
@@ -382,6 +406,18 @@ const RETUNED: &[(&str, Field, &str)] = &[
          median of one tank and a maximum of two",
     ),
     (
+        "produce-mad-tank",
+        Field::Condition,
+        "the savings model also holds while an armour doctrine has a war \
+         factory and no service depot; see produce-vehicle",
+    ),
+    (
+        "produce-infantry-rush",
+        Field::Condition,
+        "unit caps are scaled by force-size and no longer collapse on a product \
+         of two weights; see produce-vehicle",
+    ),
+    (
         "produce-rocket-soldier",
         Field::Condition,
         "reserve is a multiple of the unit's price, not a flat sum added to it",
@@ -392,6 +428,12 @@ const RETUNED: &[(&str, Field, &str)] = &[
         "reserve is a multiple of the unit's price, not a flat sum added to it",
     ),
     (
+        "produce-siege-vehicle",
+        Field::Condition,
+        "the savings model also holds while an armour doctrine has a war \
+         factory and no service depot; see produce-vehicle",
+    ),
+    (
         "produce-specialist-infantry",
         Field::Condition,
         "reserve is a multiple of the unit's price, not a flat sum added to it",
@@ -400,6 +442,40 @@ const RETUNED: &[(&str, Field, &str)] = &[
         "produce-spy",
         Field::Condition,
         "reserve is a multiple of the unit's price, not a flat sum added to it",
+    ),
+    (
+        "produce-vehicle",
+        Field::Condition,
+        "the savings model also holds while an armour doctrine has a war \
+         factory and no service depot. The depot costs 1200 and is the medium \
+         tank's prerequisite, so until it stands the only armour on offer is \
+         the light tank and artillery — which cost 700 and 850 and eat exactly \
+         the money the depot needs. Across games 98-101 the depot landed at \
+         ticks 17170, 14800, never and 19820, and peak medium tanks were 1, 2, \
+         0 and 1; game 101 ran 36780 ticks and fielded one. In that game, with \
+         a war factory standing, cash reached 1200 in 1 of 257 sampled states \
+         before the depot was finally bought. Go had no such hold. The escapes \
+         keep it narrow: doctrines under vehicle-weight 0.3 are untouched, and \
+         a depot that cannot be built at all — no construction yard, wrong \
+         faction — releases the hold rather than freezing the vehicle line \
+         while the base dies. \
+         \
+         The unit cap also changed, and every army-mass rule now shares it \
+         through army-cap(). Two defects: Go gated the medium/heavy cap on \
+         tech-priority * vehicle-weight, and two factors each <= 1 multiply to \
+         less than either, so an armoured doctrine at tech 0.35 and vehicle \
+         0.65 got lerp(1, 5, 0.23) — ONE medium tank. That is why peak medium \
+         tanks was 1 in games 98, 100, 101 and 102, and 2 in 99; game 103 \
+         reached 3 only because this generic rule also builds them, bypassing \
+         the dedicated rule's cap. The product is now max() of the two. \
+         Second, the caps were standing-army ceilings rather than budgets: at \
+         the ~4:1 attrition measured in game 103 (36 vehicle orders, peak 10 \
+         alive; 92 infantry, peak 19) a ceiling of 7 leaves Vimy hovering at \
+         two or three and never banking a force, which is also why \
+         form-ground-attack's six-unit threshold rarely met. The tops of the \
+         ranges are raised and the bottoms left alone, so harassment doctrines \
+         are unaffected, and force-size scales the whole ceiling so a doctrine \
+         can choose to mass. force-size 0 is the corpus's world",
     ),
     (
         "produce-aircraft",
@@ -484,10 +560,25 @@ fn rules_in(dir: &std::path::Path, file: &str) -> HashSet<String> {
     ast.rules.into_iter().map(|r| r.name.text).collect()
 }
 
+/// Params added after the corpus was frozen, with the value that disables them.
+///
+/// The corpus records what Go emitted, and Go can no longer be asked again — the
+/// rule set it came from was deleted with the port. A knob it never had is
+/// therefore bound to its off position, which is exactly the behaviour the
+/// frozen rows describe. Anything that then differs is a real divergence and
+/// belongs in RETUNED, not here.
+const POST_FREEZE_PARAMS: &[(&str, f64)] = &[("force-size", 0.0)];
+
 fn corpus() -> Option<Vec<Case>> {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/acceptance.json");
     let json = std::fs::read_to_string(path).ok()?;
-    Some(serde_json::from_str(&json).expect("acceptance.json"))
+    let mut cases: Vec<Case> = serde_json::from_str(&json).expect("acceptance.json");
+    for case in &mut cases {
+        for (name, off) in POST_FREEZE_PARAMS {
+            case.params.entry((*name).to_string()).or_insert(*off);
+        }
+    }
+    Some(cases)
 }
 
 /// Go writes whatever its templates contain; vimyc writes a canonical form. The
