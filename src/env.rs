@@ -954,6 +954,7 @@ pub const ACTIONS: &[&str] = &[
     "produce-tesla-coil",
     "produce-vehicle",
     "produce-war-factory",
+    "recall-stray-units",
     "repair-buildings",
     "scout",
     "scout-patrol",
