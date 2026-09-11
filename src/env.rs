@@ -866,6 +866,7 @@ pub const CATEGORIES: &[&str] = &[
     "emergency-defense",
     "ground-attack-choice",
     "harvester",
+    "harvester-defense",
     "maintenance",
     "micro",
     "minelayer",
@@ -1061,6 +1062,10 @@ pub const ACTION_SIGNATURES: &[ActionSignature] = &[
     ActionSignature {
         name: "squad-defend",
         params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
+    },
+    ActionSignature {
+        name: "scramble-to-harvesters",
+        params: &[ParamType::Exact(Type::Float), ParamType::Exact(Type::Int)],
     },
     ActionSignature {
         name: "squad-guard-harvesters",
