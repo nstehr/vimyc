@@ -212,6 +212,11 @@ const RETUNED: &[(&str, Field, &str)] = &[
         "above the tech centre when economy and tech are weighted equally",
     ),
     (
+        "build-base-defense-rush",
+        Field::Condition,
+        "the defense cap's top is raised, for the reason in build-base-defense",
+    ),
+    (
         "build-base-defense",
         Field::Condition,
         "affordable() now holds a reserve for whichever tech gate is still \
