@@ -308,6 +308,9 @@ impl<'a> Evaluator<'a> {
             Predicate::QueueBusy => {
                 Value::Bool(st.call_bool(&key("queue-busy", args, self.params)))
             }
+            Predicate::QueueDepth => {
+                Value::Int(st.call_int(&key("queue-depth", args, self.params)))
+            }
             Predicate::QueueProducingRole => {
                 Value::Bool(st.call_bool(&key("queue-producing-role", args, self.params)))
             }

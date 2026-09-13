@@ -658,11 +658,11 @@
     ],
     "used": true,
     "keys": [
-      "damaged-combat-units(0.19)"
+      "damaged-combat-units(0.22)"
     ],
     "literals": [
       [
-        "0.19"
+        "0.22"
       ]
     ]
   },
@@ -755,11 +755,11 @@
     ],
     "used": true,
     "keys": [
-      "harvesters-in-danger(0.14)"
+      "harvesters-in-danger(0.13)"
     ],
     "literals": [
       [
-        "0.14"
+        "0.13"
       ]
     ]
   },
@@ -836,6 +836,7 @@
       "has-role(airfield)",
       "has-role(barracks)",
       "has-role(construction-yard)",
+      "has-role(flame-tower)",
       "has-role(iron-curtain)",
       "has-role(kennel)",
       "has-role(missile-silo)",
@@ -845,6 +846,7 @@
       "has-role(refinery)",
       "has-role(service-depot)",
       "has-role(tech-center)",
+      "has-role(tesla-coil)",
       "has-role(war-factory)"
     ],
     "literals": [
@@ -852,6 +854,7 @@
         "airfield",
         "barracks",
         "construction-yard",
+        "flame-tower",
         "iron-curtain",
         "kennel",
         "missile-silo",
@@ -861,6 +864,7 @@
         "refinery",
         "service-depot",
         "tech-center",
+        "tesla-coil",
         "war-factory"
       ]
     ]
@@ -1354,8 +1358,8 @@
     ],
     "used": true,
     "keys": [
-      "overextended-squad-members(ground-attack,0.47)",
-      "overextended-squad-members(naval-attack,0.47)"
+      "overextended-squad-members(ground-attack,0.45)",
+      "overextended-squad-members(naval-attack,0.45)"
     ],
     "literals": [
       [
@@ -1363,7 +1367,7 @@
         "naval-attack"
       ],
       [
-        "0.47"
+        "0.45"
       ]
     ]
   },
@@ -1400,8 +1404,7 @@
       "queue-busy(Building)",
       "queue-busy(Defense)",
       "queue-busy(Infantry)",
-      "queue-busy(Ship)",
-      "queue-busy(Vehicle)"
+      "queue-busy(Ship)"
     ],
     "literals": [
       [
@@ -1409,7 +1412,31 @@
         "Building",
         "Defense",
         "Infantry",
-        "Ship",
+        "Ship"
+      ]
+    ]
+  },
+  {
+    "name": "QueueDepth",
+    "kebab": "queue-depth",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "int"
+    ],
+    "domains": [
+      "queue"
+    ],
+    "used": true,
+    "keys": [
+      "queue-depth(Vehicle)"
+    ],
+    "literals": [
+      [
         "Vehicle"
       ]
     ]
@@ -1431,11 +1458,35 @@
     ],
     "used": true,
     "keys": [
-      "queue-producing-role(radar)"
+      "queue-producing-role(aa-defense)",
+      "queue-producing-role(airfield)",
+      "queue-producing-role(barracks)",
+      "queue-producing-role(gap-generator)",
+      "queue-producing-role(iron-curtain)",
+      "queue-producing-role(missile-silo)",
+      "queue-producing-role(naval-yard)",
+      "queue-producing-role(ore-silo)",
+      "queue-producing-role(radar)",
+      "queue-producing-role(refinery)",
+      "queue-producing-role(service-depot)",
+      "queue-producing-role(tech-center)",
+      "queue-producing-role(war-factory)"
     ],
     "literals": [
       [
-        "radar"
+        "aa-defense",
+        "airfield",
+        "barracks",
+        "gap-generator",
+        "iron-curtain",
+        "missile-silo",
+        "naval-yard",
+        "ore-silo",
+        "radar",
+        "refinery",
+        "service-depot",
+        "tech-center",
+        "war-factory"
       ]
     ]
   },

@@ -65,6 +65,7 @@ pub enum Predicate {
     OverextendedSquadMembers,
     PowerExcess,
     QueueBusy,
+    QueueDepth,
     QueueProducingRole,
     QueueReady,
     ResourcesNearCap,
@@ -497,6 +498,12 @@ pub const PREDICATES: &[Signature] = &[
         name: "queue-busy",
         params: &[ParamType::Exact(Type::Enum(Domain::Queue))],
         ret: Type::Bool,
+    },
+    Signature {
+        id: Predicate::QueueDepth,
+        name: "queue-depth",
+        params: &[ParamType::Exact(Type::Enum(Domain::Queue))],
+        ret: Type::Int,
     },
     Signature {
         id: Predicate::QueueProducingRole,

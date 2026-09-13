@@ -362,6 +362,16 @@ const RETUNED: &[(&str, Field, &str)] = &[
     // leaves anything at or above the cap exactly where it was — only the cheap
     // end moves, which is the end that was wrong.
     (
+        "produce-apc",
+        Field::Condition,
+        "the vehicle queue is gated on DEPTH rather than on being idle, so a second item can wait behind the first. Go built one at a time and never queued ahead: the queue sat idle between an item finishing and a rule noticing, and in that gap whatever cleared the lowest cash threshold took the money — game 111 built 53 rifles and 6 tanks under a vehicle-weighted doctrine. A human commits future income by queuing now",
+    ),
+    (
+        "recover-mcv",
+        Field::Condition,
+        "the vehicle queue is gated on DEPTH rather than on being idle, so a second item can wait behind the first. Go built one at a time and never queued ahead: the queue sat idle between an item finishing and a rule noticing, and in that gap whatever cleared the lowest cash threshold took the money — game 111 built 53 rifles and 6 tanks under a vehicle-weighted doctrine. A human commits future income by queuing now",
+    ),
+    (
         "produce-assault-apc",
         Field::Condition,
         "reserve is a multiple of the unit's price, not a flat sum added to it",
