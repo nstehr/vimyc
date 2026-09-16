@@ -154,6 +154,31 @@ const RETUNED: &[(&str, Field, &str)] = &[
          category built cheapest-first, against its own priority numbers",
     ),
     (
+        "squad-naval-attack",
+        Field::Condition,
+        "activation() is capped at 0.5; see squad-air-attack",
+    ),
+    (
+        "squad-naval-attack-known-base",
+        Field::Condition,
+        "activation() is capped at 0.5; see squad-air-attack",
+    ),
+    (
+        "squad-air-attack",
+        Field::Condition,
+        "activation() is capped at 0.5. Game 124 measured squad-ready-ratio for the ground-attack squad at a median of 0.00 and a MAXIMUM of 0.75 across 587 sampled states, against a gate of 0.80 — never satisfied, in 0% of them, while squad-attack-known-base acted 7 times in 33110 ticks. The fallback was worse: lerpf(0.6, 1.0, 1.0 - aggression) is 0.90 at the aggression 0.25 the strategist picks. Readiness counts IDLE members and an attacking squad is moving, so issuing the order collapses the squad's own readiness and the attack is self-extinguishing",
+    ),
+    (
+        "squad-air-attack-known-base",
+        Field::Condition,
+        "activation() is capped at 0.5. Game 124 measured squad-ready-ratio for the ground-attack squad at a median of 0.00 and a MAXIMUM of 0.75 across 587 sampled states, against a gate of 0.80 — never satisfied, in 0% of them, while squad-attack-known-base acted 7 times in 33110 ticks. The fallback was worse: lerpf(0.6, 1.0, 1.0 - aggression) is 0.90 at the aggression 0.25 the strategist picks. Readiness counts IDLE members and an attacking squad is moving, so issuing the order collapses the squad's own readiness and the attack is self-extinguishing",
+    ),
+    (
+        "squad-focus-fire",
+        Field::Condition,
+        "activation() is capped at 0.5. Game 124 measured squad-ready-ratio for the ground-attack squad at a median of 0.00 and a MAXIMUM of 0.75 across 587 sampled states, against a gate of 0.80 — never satisfied, in 0% of them, while squad-attack-known-base acted 7 times in 33110 ticks. The fallback was worse: lerpf(0.6, 1.0, 1.0 - aggression) is 0.90 at the aggression 0.25 the strategist picks. Readiness counts IDLE members and an attacking squad is moving, so issuing the order collapses the squad's own readiness and the attack is self-extinguishing",
+    ),
+    (
         "squad-attack",
         Field::Condition,
         "a live ground-defence squad satisfies the base-defence floor: Go \
