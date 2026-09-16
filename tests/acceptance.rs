@@ -37,8 +37,6 @@ struct GoRule {
 /// Explicit rather than "ignore anything unmatched": the whole value of the
 /// frozen corpus is that an unexpected rule is still an error.
 const POST_PORT: &[&str] = &[
-    "form-harvester-guard",
-    "guard-harvesters",
     "recall-stray-units",
     "scramble-to-harvesters",
 ];
