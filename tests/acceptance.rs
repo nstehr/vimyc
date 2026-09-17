@@ -274,9 +274,11 @@ const RETUNED: &[(&str, Field, &str)] = &[
          wanting artillery at all is a fine reason to want a factory sooner. \
          The demotion then overshot: at 460 the rule sat BELOW produce-vehicle \
          and, in an exclusive category, a rule that loses the contest does not \
-         build later, it never builds. Game 127 measured it — satisfiable in \
-         213 of 691 sampled states, preempted in all 213, zero artillery in \
-         111510 ticks against 323 plain tanks, 2 enemy buildings destroyed. \
+         build later, it never builds. Game 127 measured it — ready in 216 of \
+         660 sampled states and preempted in all 216, so it produced 5 times \
+         in 111510 ticks against produce-vehicle's 323, about 1 percent of \
+         the economy, for 2 enemy buildings destroyed. Not zero: the sample \
+         is every 15th evaluation, so the engine's act count settles it. \
          The non-first branch is now 482, back above produce-vehicle. What \
          stops game 96's flood is the cap, not the ordering: the non-first \
          branch caps siege at army-cap(1,5,..) where produce-vehicle caps \
