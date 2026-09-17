@@ -188,6 +188,18 @@ const RETUNED: &[(&str, Field, &str)] = &[
     ),
     (
         "flee-harvesters",
+        Field::Priority,
+        "plus two, to keep it off squad-focus-fire's lerp(200, 360, \
+         aggression) + 1. They tied at 273 in 3 of game 130's 52 doctrine \
+         windows. Both sit in the non-exclusive micro category, so the tie \
+         decides nothing about which fires — it leaves their ORDER undefined, \
+         which is a thing that changes under you for no reason you can name. \
+         Found by the compiler, which has emitted this all along and was read \
+         for the first time once the post mortem started printing warnings \
+         per doctrine window",
+    ),
+    (
+        "flee-harvesters",
         Field::Action,
         "the flight radius is what a harvester can be SHOT from, not what it \
          can see. Go fled anything within lerpf(0.05, 0.15, economy-priority) \
