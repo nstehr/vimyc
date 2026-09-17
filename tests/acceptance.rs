@@ -486,7 +486,20 @@ const RETUNED: &[(&str, Field, &str)] = &[
         "produce-siege-vehicle",
         Field::Condition,
         "the savings model also holds while an armour doctrine has a war \
-         factory and no service depot; see produce-vehicle",
+         factory and no service depot; see produce-vehicle. Two gates on \
+         composition are also new, and they are what makes the promotion to \
+         482 safe. Artillery is fragile, so each loss drops the count below \
+         the absolute cap and hands siege first call on the next credits: \
+         game 128 ran that treadmill to 14 artillery in 33090 ticks while \
+         the tank rate fell by three quarters. So siege now needs a screen \
+         of lerp(2,4,vehicle-weight) TANKS, and must stay under a third of \
+         them, which holds artillery near a quarter of the vehicle force at \
+         every size. Tanks, not combat vehicles: CombatVehicleCount includes \
+         artillery and a gate written on it would satisfy itself. Both \
+         numbers come from what Vimy fields — peak 13 vehicles in game 127 \
+         and 4 in game 128 — not from what a tank line ought to look like; a \
+         screen of seven was tried first and would have returned the rule to \
+         never firing",
     ),
     (
         "produce-specialist-infantry",
