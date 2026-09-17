@@ -50,6 +50,11 @@ const POST_PORT: &[&str] = &[
 enum Field {
     Priority,
     Condition,
+    /// A parameter baked into the action changed. Separate from Condition
+    /// because a rule can keep exactly the gate Go had and still do something
+    /// different when it fires — flee-harvesters kept "run when threatened"
+    /// and changed how far away "threatened" starts.
+    Action,
     /// vimyc emits the rule for doctrines where Go did not. A retune that
     /// widens a gate changes which doctrines a rule appears in at all, not just
     /// what it says, and that is as deliberate as any other divergence.
@@ -164,17 +169,58 @@ const RETUNED: &[(&str, Field, &str)] = &[
     (
         "squad-air-attack",
         Field::Condition,
-        "activation() is capped at 0.5. Game 124 measured squad-ready-ratio for the ground-attack squad at a median of 0.00 and a MAXIMUM of 0.75 across 587 sampled states, against a gate of 0.80 — never satisfied, in 0% of them, while squad-attack-known-base acted 7 times in 33110 ticks. The fallback was worse: lerpf(0.6, 1.0, 1.0 - aggression) is 0.90 at the aggression 0.25 the strategist picks. Readiness counts IDLE members and an attacking squad is moving, so issuing the order collapses the squad's own readiness and the attack is self-extinguishing",
+        "activation() is capped, at 0.25 since game 129 and at 0.5 before it. Game 124 measured squad-ready-ratio for the ground-attack squad at a median of 0.00 and a MAXIMUM of 0.75 across 587 sampled states, against a gate of 0.80 — never satisfied, in 0% of them, while squad-attack-known-base acted 7 times in 33110 ticks. The fallback was worse: lerpf(0.6, 1.0, 1.0 - aggression) is 0.90 at the aggression 0.25 the strategist picks. Readiness counts IDLE members and an attacking squad is moving, so issuing the order collapses the squad's own readiness and the attack is self-extinguishing. 0.5 was still unreachable: game 127 peaked at 0.40 over 111510 ticks and launched nothing, and across 127 and 129 the gate held in 0 and 7 percent of states against 1 and 17 at 0.25",
     ),
     (
         "squad-air-attack-known-base",
         Field::Condition,
-        "activation() is capped at 0.5. Game 124 measured squad-ready-ratio for the ground-attack squad at a median of 0.00 and a MAXIMUM of 0.75 across 587 sampled states, against a gate of 0.80 — never satisfied, in 0% of them, while squad-attack-known-base acted 7 times in 33110 ticks. The fallback was worse: lerpf(0.6, 1.0, 1.0 - aggression) is 0.90 at the aggression 0.25 the strategist picks. Readiness counts IDLE members and an attacking squad is moving, so issuing the order collapses the squad's own readiness and the attack is self-extinguishing",
+        "activation() is capped, at 0.25 since game 129 and at 0.5 before it. Game 124 measured squad-ready-ratio for the ground-attack squad at a median of 0.00 and a MAXIMUM of 0.75 across 587 sampled states, against a gate of 0.80 — never satisfied, in 0% of them, while squad-attack-known-base acted 7 times in 33110 ticks. The fallback was worse: lerpf(0.6, 1.0, 1.0 - aggression) is 0.90 at the aggression 0.25 the strategist picks. Readiness counts IDLE members and an attacking squad is moving, so issuing the order collapses the squad's own readiness and the attack is self-extinguishing. 0.5 was still unreachable: game 127 peaked at 0.40 over 111510 ticks and launched nothing, and across 127 and 129 the gate held in 0 and 7 percent of states against 1 and 17 at 0.25",
+    ),
+    (
+        "flee-harvesters",
+        Field::Condition,
+        "the same radius change as the Action entry: the gate counts \
+         harvesters in danger and carries the distance too, so narrowing the \
+         flight radius necessarily narrows what counts as danger. Recorded \
+         separately because the two really are separate fields and had in \
+         fact drifted apart, the gate rounding to 0.05 while the action fled \
+         at 0.045",
+    ),
+    (
+        "flee-harvesters",
+        Field::Action,
+        "the flight radius is what a harvester can be SHOT from, not what it \
+         can see. Go fled anything within lerpf(0.05, 0.15, economy-priority) \
+         of the map diagonal, which at the 0.8 the strategist picks is 0.13 — \
+         24 cells on a 128 map, a quarter of its width. Game 129 fled 436 \
+         times in 57340 ticks, once every 130, against 121 orders to resume \
+         harvesting; it held 11 harvesters and 9 refineries and still earned \
+         1.68 credits a tick, because they spent the game running rather than \
+         hauling. Vimy was broke for it — the war factory idle 47 percent of \
+         the game, able to afford a tank in 31 percent, and an army that \
+         never passed 6 vehicles. Ground weapons reach 4 to 7 cells, so the \
+         band is now 0.025 to 0.05, about 5 to 9 cells. Rounded inside the \
+         definition so the gate and the action agree: they had drifted to \
+         0.05 against 0.045, which let the rule fire and move nobody",
+    ),
+    (
+        "form-ground-attack",
+        Field::Condition,
+        "the forming threshold is three tenths of the group size, not six. \
+         Six tenths of the eleven the strategist pins every game asked for \
+         SIX unassigned idle ground units at one instant, and across games \
+         127 and 129 that count ran a median of 0 and a maximum of 6 — the \
+         gate held in 0 of 1364 sampled states, never rather than rarely. \
+         Three tenths asks for three and holds in about one state in ten. \
+         Idle sits near zero because the defensive rules repossess the army \
+         continuously, so a rendezvous condition counting simultaneity was \
+         the wrong shape whatever number it carried; this is a calibration \
+         to what Vimy fields, not a fix for that",
     ),
     (
         "squad-focus-fire",
         Field::Condition,
-        "activation() is capped at 0.5. Game 124 measured squad-ready-ratio for the ground-attack squad at a median of 0.00 and a MAXIMUM of 0.75 across 587 sampled states, against a gate of 0.80 — never satisfied, in 0% of them, while squad-attack-known-base acted 7 times in 33110 ticks. The fallback was worse: lerpf(0.6, 1.0, 1.0 - aggression) is 0.90 at the aggression 0.25 the strategist picks. Readiness counts IDLE members and an attacking squad is moving, so issuing the order collapses the squad's own readiness and the attack is self-extinguishing",
+        "activation() is capped, at 0.25 since game 129 and at 0.5 before it. Game 124 measured squad-ready-ratio for the ground-attack squad at a median of 0.00 and a MAXIMUM of 0.75 across 587 sampled states, against a gate of 0.80 — never satisfied, in 0% of them, while squad-attack-known-base acted 7 times in 33110 ticks. The fallback was worse: lerpf(0.6, 1.0, 1.0 - aggression) is 0.90 at the aggression 0.25 the strategist picks. Readiness counts IDLE members and an attacking squad is moving, so issuing the order collapses the squad's own readiness and the attack is self-extinguishing. 0.5 was still unreachable: game 127 peaked at 0.40 over 111510 ticks and launched nothing, and across 127 and 129 the gate held in 0 and 7 percent of states against 1 and 17 at 0.25",
     ),
     (
         "squad-attack",
@@ -796,7 +842,7 @@ fn block_matches_go(file: Option<&str>) {
                 Some(format!("category {} vs {}", r.category, want.category))
             } else if r.exclusive != want.exclusive {
                 Some(format!("exclusive {} vs {}", r.exclusive, want.exclusive))
-            } else if r.action != want.action {
+            } else if r.action != want.action && !retuned(Field::Action) {
                 Some(format!("action {} vs {}", r.action, want.action))
             } else if normalise(&r.condition) != normalise(&want.condition)
                 && !retuned(Field::Condition)
@@ -904,6 +950,7 @@ fn every_retuned_rule_exists_and_still_differs() {
                     (Field::Condition, Some(w)) => {
                         normalise(&r.condition) != normalise(&w.condition)
                     }
+                    (Field::Action, Some(w)) => r.action != w.action,
                 };
                 if changed {
                     differs.insert((*n, *field));
