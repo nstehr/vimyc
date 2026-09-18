@@ -402,6 +402,21 @@ const RETUNED: &[(&str, Field, &str)] = &[
         "below the rocket soldier; rifle top-ups are the more disposable",
     ),
     (
+        "emergency-base-defense",
+        Field::Condition,
+        "the guard len(IdleGroundUnits()) == 0 is gone. It was written to mean \
+         \"we have no spare units, so take what is nearby\" and it never \
+         guarded anything: IdleGroundUnits counts units with NO CURRENT ORDER, \
+         which is zero whenever Vimy is doing something, so the clause held on \
+         every tick. Game 136 fired this 311 times against the assault's 133 \
+         and the squad was dragged home twice as often as it was sent out — \
+         fully commandable at 4.8 of 4.8 members and still 22 cells apart \
+         against a required 8. Removed rather than repaired, because there is \
+         nothing to repair: the action now prefers units not rostered to an \
+         attacking squad, which is what the guard was reaching for, and falls \
+         back to everything when the offensive is all there is",
+    ),
+    (
         "produce-spy",
         Field::Priority,
         "below capture-defense rifles, which are cheaper and defensive",
@@ -853,17 +868,6 @@ fn block_matches_go(file: Option<&str>) {
             .map(|r| (r.name.as_str(), r))
             .collect();
 
-        // Absence is about rules NOT in `mine`, so it cannot be proven by the
-        // loop below, which walks what vimyc emitted.
-        for (n, field, _) in RETUNED {
-            if *field != Field::Absence {
-                continue;
-            }
-            let go_has = case.rules.iter().any(|g| g.name == *n);
-            if go_has && !mine.iter().any(|r| r.name == *n) {
-                differs.insert((*n, *field));
-            }
-        }
         for r in &mine {
             // The unit emits every block's rules; `ported` is the subset under
             // comparison, and already has the post-port additions removed.
