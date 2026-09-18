@@ -59,6 +59,11 @@ enum Field {
     /// widens a gate changes which doctrines a rule appears in at all, not just
     /// what it says, and that is as deliberate as any other divergence.
     Presence,
+    /// The mirror: Go emitted the rule and vimyc deliberately does not. A gate
+    /// narrowed far enough removes a rule from doctrines it used to serve, and
+    /// that needs recording for the same reason widening one does — otherwise
+    /// the only way to satisfy the corpus is to leave a useless rule firing.
+    Absence,
 }
 
 /// Rules deliberately changed after the port, what changed, and why.
@@ -567,7 +572,24 @@ const RETUNED: &[(&str, Field, &str)] = &[
     (
         "produce-spy",
         Field::Condition,
-        "reserve is a multiple of the unit's price, not a flat sum added to it",
+        "reserve is a multiple of the unit's price, not a flat sum added to it. \
+         The scout-priority escape is also gone; see the Presence entry",
+    ),
+    (
+        "produce-spy",
+        Field::Absence,
+        "gated on capture alone, so it disappears for the scouting doctrines \
+         Go emitted it for. A spy is nominally dual-use, infiltration or \
+         stealthy recon, and NEITHER is implemented: there is no infiltrate \
+         action in the rule set or in the mod, and designateScout picks dogs \
+         and never a spy. The escape was the only reason it fired and nothing \
+         stood behind the justification. scout_priority sits near 0.69 every \
+         game, so the gate never closed — game 135's infantry line spent 60 \
+         percent of its sampled time on spies at 500 credits against a \
+         rifleman's 100, rebuilt after every death because role-count(spy) < \
+         1 caps it at one alive. capture_priority averages 0.01 to 0.03, so \
+         this is effectively off until something uses a spy, which is the \
+         honest state of it rather than a pretence that it is useful",
     ),
     (
         "produce-vehicle",
@@ -831,6 +853,17 @@ fn block_matches_go(file: Option<&str>) {
             .map(|r| (r.name.as_str(), r))
             .collect();
 
+        // Absence is about rules NOT in `mine`, so it cannot be proven by the
+        // loop below, which walks what vimyc emitted.
+        for (n, field, _) in RETUNED {
+            if *field != Field::Absence {
+                continue;
+            }
+            let go_has = case.rules.iter().any(|g| g.name == *n);
+            if go_has && !mine.iter().any(|r| r.name == *n) {
+                differs.insert((*n, *field));
+            }
+        }
         for r in &mine {
             // The unit emits every block's rules; `ported` is the subset under
             // comparison, and already has the post-port additions removed.
@@ -872,9 +905,16 @@ fn block_matches_go(file: Option<&str>) {
         }
 
         for name in theirs.keys() {
-            if !mine.iter().any(|r| r.name == *name) {
-                differ.push(format!("doctrine {i}: Go emitted `{name}`, vimyc did not"));
+            if mine.iter().any(|r| r.name == *name) {
+                continue;
             }
+            if RETUNED
+                .iter()
+                .any(|(n, d, _)| n == name && *d == Field::Absence)
+            {
+                continue;
+            }
+            differ.push(format!("doctrine {i}: Go emitted `{name}`, vimyc did not"));
         }
     }
 
@@ -945,6 +985,17 @@ fn every_retuned_rule_exists_and_still_differs() {
         else {
             unreachable!()
         };
+        // Absence is about rules NOT in `mine`, so it cannot be proven by the
+        // loop below, which walks what vimyc emitted.
+        for (n, field, _) in RETUNED {
+            if *field != Field::Absence {
+                continue;
+            }
+            let go_has = case.rules.iter().any(|g| g.name == *n);
+            if go_has && !mine.iter().any(|r| r.name == *n) {
+                differs.insert((*n, *field));
+            }
+        }
         for r in &mine {
             // Not `continue` on a missing Go rule: a rule Go never emitted for
             // this doctrine is exactly what a Presence entry claims, so it has
@@ -957,6 +1008,8 @@ fn every_retuned_rule_exists_and_still_differs() {
                 let changed = match (field, want) {
                     (Field::Presence, None) => true,
                     (Field::Presence, Some(_)) => false,
+                    // Handled above: this loop only sees rules vimyc emitted.
+                    (Field::Absence, _) => false,
                     (_, None) => false,
                     (Field::Priority, Some(w)) => r.priority != w.priority,
                     (Field::Condition, Some(w)) => {
