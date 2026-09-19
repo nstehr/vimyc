@@ -182,6 +182,85 @@ const RETUNED: &[(&str, Field, &str)] = &[
         "activation() is capped, at 0.25 since game 129 and at 0.5 before it. Game 124 measured squad-ready-ratio for the ground-attack squad at a median of 0.00 and a MAXIMUM of 0.75 across 587 sampled states, against a gate of 0.80 — never satisfied, in 0% of them, while squad-attack-known-base acted 7 times in 33110 ticks. The fallback was worse: lerpf(0.6, 1.0, 1.0 - aggression) is 0.90 at the aggression 0.25 the strategist picks. Readiness counts IDLE members and an attacking squad is moving, so issuing the order collapses the squad's own readiness and the attack is self-extinguishing. 0.5 was still unreachable: game 127 peaked at 0.40 over 111510 ticks and launched nothing, and across 127 and 129 the gate held in 0 and 7 percent of states against 1 and 17 at 0.25",
     ),
     (
+        "scramble-base-defense",
+        Field::Absence,
+        "five rules sent units at a threat near home — scramble-base-defense, \
+         emergency-base-defense, defend-base, squad-defend-base and \
+         defend-critical-building — with five triggers and four unit pools, \
+         and three of them called the SAME action. One said so in its own \
+         because: \"above scramble-base-defense, which does the same thing \
+         with a looser condition\". Nobody designed that, it accreted, and \
+         game 143 spent 2143 defensive acts against 248 attack acts while a \
+         squad setting out lost a third of itself in transit. Narrowing any \
+         one of them widened the next, three rounds of it. They are now one \
+         rule whose action escalates explicitly: garrison, unassigned, \
+         anything not on the offensive, and the assault itself only when core \
+         infrastructure is actually being hit",
+    ),
+    (
+        "emergency-base-defense",
+        Field::Absence,
+        "five rules sent units at a threat near home — scramble-base-defense, \
+         emergency-base-defense, defend-base, squad-defend-base and \
+         defend-critical-building — with five triggers and four unit pools, \
+         and three of them called the SAME action. One said so in its own \
+         because: \"above scramble-base-defense, which does the same thing \
+         with a looser condition\". Nobody designed that, it accreted, and \
+         game 143 spent 2143 defensive acts against 248 attack acts while a \
+         squad setting out lost a third of itself in transit. Narrowing any \
+         one of them widened the next, three rounds of it. They are now one \
+         rule whose action escalates explicitly: garrison, unassigned, \
+         anything not on the offensive, and the assault itself only when core \
+         infrastructure is actually being hit",
+    ),
+    (
+        "squad-defend-base",
+        Field::Absence,
+        "five rules sent units at a threat near home — scramble-base-defense, \
+         emergency-base-defense, defend-base, squad-defend-base and \
+         defend-critical-building — with five triggers and four unit pools, \
+         and three of them called the SAME action. One said so in its own \
+         because: \"above scramble-base-defense, which does the same thing \
+         with a looser condition\". Nobody designed that, it accreted, and \
+         game 143 spent 2143 defensive acts against 248 attack acts while a \
+         squad setting out lost a third of itself in transit. Narrowing any \
+         one of them widened the next, three rounds of it. They are now one \
+         rule whose action escalates explicitly: garrison, unassigned, \
+         anything not on the offensive, and the assault itself only when core \
+         infrastructure is actually being hit",
+    ),
+    (
+        "defend-critical-building",
+        Field::Absence,
+        "five rules sent units at a threat near home — scramble-base-defense, \
+         emergency-base-defense, defend-base, squad-defend-base and \
+         defend-critical-building — with five triggers and four unit pools, \
+         and three of them called the SAME action. One said so in its own \
+         because: \"above scramble-base-defense, which does the same thing \
+         with a looser condition\". Nobody designed that, it accreted, and \
+         game 143 spent 2143 defensive acts against 248 attack acts while a \
+         squad setting out lost a third of itself in transit. Narrowing any \
+         one of them widened the next, three rounds of it. They are now one \
+         rule whose action escalates explicitly: garrison, unassigned, \
+         anything not on the offensive, and the assault itself only when core \
+         infrastructure is actually being hit",
+    ),
+    (
+        "defend-base",
+        Field::Presence,
+        "the survivor of that consolidation, so it now appears for every \
+         doctrine rather than only those with ground_defense_priority <= 0.3. \
+         Its gate is the union of the five it replaced",
+    ),
+    (
+        "defend-base",
+        Field::Condition,
+        "gate is the union of the five rules it replaced: base under attack or \
+         critical infrastructure hit, with any ground unit near the base. The \
+         choice of WHICH units is no longer in the condition at all — it moved \
+         into the action, where it can escalate",
+    ),
+    (
         "flee-harvesters",
         Field::Condition,
         "the same radius change as the Action entry: the gate counts \
@@ -400,21 +479,6 @@ const RETUNED: &[(&str, Field, &str)] = &[
         "produce-bridge-infantry",
         Field::Priority,
         "below the rocket soldier; rifle top-ups are the more disposable",
-    ),
-    (
-        "emergency-base-defense",
-        Field::Condition,
-        "the guard len(IdleGroundUnits()) == 0 is gone. It was written to mean \
-         \"we have no spare units, so take what is nearby\" and it never \
-         guarded anything: IdleGroundUnits counts units with NO CURRENT ORDER, \
-         which is zero whenever Vimy is doing something, so the clause held on \
-         every tick. Game 136 fired this 311 times against the assault's 133 \
-         and the squad was dragged home twice as often as it was sent out — \
-         fully commandable at 4.8 of 4.8 members and still 22 cells apart \
-         against a required 8. Removed rather than repaired, because there is \
-         nothing to repair: the action now prefers units not rostered to an \
-         attacking squad, which is what the guard was reaching for, and falls \
-         back to everything when the offensive is all there is",
     ),
     (
         "produce-spy",
@@ -973,7 +1037,15 @@ fn every_retuned_rule_exists_and_still_differs() {
     let ast = rule_set(&dir).ast;
 
     let names: HashSet<&str> = ast.rules.iter().map(|r| r.name.text.as_str()).collect();
-    for (n, _, _) in RETUNED {
+    for (n, field, _) in RETUNED {
+        // Absence says "Go emitted this and vimyc does not", which covers two
+        // different things: a rule deleted outright, like the four base
+        // defences folded into one, and a rule still present but gated out of
+        // the doctrines Go emitted it for, like produce-spy. Neither can be
+        // required to exist in source, and neither can be required not to.
+        if *field == Field::Absence {
+            continue;
+        }
         assert!(names.contains(n), "`{n}` is retuned but no longer exists");
     }
 
@@ -1077,7 +1149,16 @@ fn the_blocks_cover_every_rule_go_emits() {
         }
     }
 
-    let missing: Vec<&&str> = go.iter().filter(|n| !ported.contains(**n)).collect();
+    // A rule with an Absence entry was removed on purpose and is not missing.
+    let missing: Vec<&&str> = go
+        .iter()
+        .filter(|n| !ported.contains(**n))
+        .filter(|n| {
+            !RETUNED
+                .iter()
+                .any(|(name, field, _)| *name == **n && *field == Field::Absence)
+        })
+        .collect();
     assert!(missing.is_empty(), "not ported: {missing:?}");
 
     // A name Go never emits is not automatically wrong — `build-barracks-prereq`
