@@ -73,6 +73,19 @@ enum Field {
 /// drifted somewhere else.
 const RETUNED: &[(&str, Field, &str)] = &[
     (
+        "produce-heavy-vehicle",
+        Field::Priority,
+        "481, above produce-vehicle at 480 and below the siege gate at 482. It \
+         was 475 and fired 0 times in 1866 evaluations of game 156, only 292 of \
+         which were category skips. An exclusive category picks the \
+         highest-priority rule whose condition HOLDS, so a rule beneath \
+         produce-vehicle gets a turn only once combat-vehicle-count saturates \
+         army-cap(3, 18, vehicle-weight) — and losses keep it under that \
+         ceiling. Heavy armour was not built late, it was never built, and the \
+         doctrine had no way to ask for it. Its own gates stay strict: a tech \
+         centre, tech-priority above 0.3, 1200 in reserve and a cap of its own",
+    ),
+    (
         "build-barracks",
         Field::Condition,
         "will not produce a second while one is already in the queue. Construction is produce-then-place, so a rule whose limit reads a ROLE COUNT — whether `not has-role` or a numeric cap — is satisfied the whole time an unplaced one sits waiting. Game 99 built three helipads under a cap of two. build-radar carried this guard alone; seventeen rules have it now",
