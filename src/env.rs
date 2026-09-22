@@ -1048,6 +1048,10 @@ pub const ACTION_SIGNATURES: &[ActionSignature] = &[
         params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
     },
     ActionSignature {
+        name: "squad-nudge-stragglers",
+        params: &[ParamType::Exact(Type::Enum(Domain::SquadName))],
+    },
+    ActionSignature {
         name: "squad-attack-known-base",
         params: &[
             ParamType::Exact(Type::Enum(Domain::SquadName)),

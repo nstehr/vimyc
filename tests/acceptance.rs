@@ -73,6 +73,23 @@ enum Field {
 /// drifted somewhere else.
 const RETUNED: &[(&str, Field, &str)] = &[
     (
+        "squad-reengage",
+        Field::Action,
+        "squad-nudge-stragglers rather than squad-attack-move. The rule exists to \
+         catch stragglers finishing an order while the squad presses forward, and \
+         it triggers on a single idle member — but squad-attack-move is the \
+         assault action and commands EVERY member, aimed at bestTargetForSquad \
+         rather than at the base the assault was marching on. So one straggler \
+         redirected the whole army. It is category combat, not the exclusive \
+         ground-attack-choice, so it acted alongside the exclusive winner instead \
+         of competing with it: two rules steering the same units at two different \
+         targets every tick. Game 159 sawtoothed 51 units across 0.3 of the map \
+         diagonal, 38 cells forward and 38 back, in front of the enemy base for \
+         thousands of ticks without closing, at 210 base-attack fires against 104 \
+         of these. The new action moves the idle members only, at the squad's own \
+         centroid, because a straggler's job is to rejoin",
+    ),
+    (
         "produce-heavy-vehicle",
         Field::Priority,
         "481, above produce-vehicle at 480 and below the siege gate at 482. It \
