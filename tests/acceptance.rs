@@ -652,7 +652,17 @@ const RETUNED: &[(&str, Field, &str)] = &[
     (
         "produce-scout-vehicle",
         Field::Condition,
-        "reserve is a multiple of the unit's price, not a flat sum added to it",
+        "reserve is a multiple of the unit's price, not a flat sum added to it. \
+         And `not has-enemy-intel()` is gone: it meant build a scout only while \
+         we know nothing, and HasEnemyIntel is true once ANY enemy building has \
+         ever been sighted, so first contact switched scouting off for good. \
+         Game 176 found the enemy base at tick 4110 of 54820 and never fired \
+         this rule again in 5368 evaluations, ending the game knowing where six \
+         enemy objects were. `not has-scout()` already caps production at one \
+         alive and re-arms when that one dies, so nothing was protecting \
+         anything. This entry covers both, and the corpus gives no coverage of \
+         either - the condition is skipped here, so the change rests on the \
+         rule reading correctly and on the next game",
     ),
     (
         "produce-siege-vehicle",
