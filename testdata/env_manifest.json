@@ -1,5 +1,28 @@
 [
   {
+    "name": "AffordableType",
+    "kebab": "affordable-type",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "string"
+    ],
+    "domains": [
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "affordable-type"
+    ],
+    "literals": [
+      []
+    ]
+  },
+  {
     "name": "AirApproachWaypoint",
     "kebab": "air-approach-waypoint",
     "params": [
@@ -67,6 +90,18 @@
     ]
   },
   {
+    "name": "ApproachChoices",
+    "kebab": "approach-choices",
+    "params": null,
+    "results": [
+      "map[string]int"
+    ],
+    "used": false,
+    "keys": [
+      "approach-choices"
+    ]
+  },
+  {
     "name": "ApproachWaypoint",
     "kebab": "approach-waypoint",
     "params": [
@@ -94,6 +129,29 @@
     ],
     "literals": [
       [],
+      []
+    ]
+  },
+  {
+    "name": "AssaultPhase",
+    "kebab": "assault-phase",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "results": [
+      "string"
+    ],
+    "domains": [
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "assault-phase"
+    ],
+    "literals": [
       []
     ]
   },
@@ -275,6 +333,35 @@
     ]
   },
   {
+    "name": "BestGroundStructureFrom",
+    "kebab": "best-ground-structure-from",
+    "params": [
+      {
+        "name": "",
+        "type": "int"
+      },
+      {
+        "name": "",
+        "type": "int"
+      }
+    ],
+    "results": [
+      "*model.Enemy"
+    ],
+    "domains": [
+      "",
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "best-ground-structure-from"
+    ],
+    "literals": [
+      [],
+      []
+    ]
+  },
+  {
     "name": "BestGroundTarget",
     "kebab": "best-ground-target",
     "params": null,
@@ -284,6 +371,35 @@
     "used": true,
     "keys": [
       "best-ground-target"
+    ]
+  },
+  {
+    "name": "BestGroundTargetFrom",
+    "kebab": "best-ground-target-from",
+    "params": [
+      {
+        "name": "",
+        "type": "int"
+      },
+      {
+        "name": "",
+        "type": "int"
+      }
+    ],
+    "results": [
+      "*model.Enemy"
+    ],
+    "domains": [
+      "",
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "best-ground-target-from"
+    ],
+    "literals": [
+      [],
+      []
     ]
   },
   {
@@ -658,11 +774,11 @@
     ],
     "used": true,
     "keys": [
-      "damaged-combat-units(0.22)"
+      "damaged-combat-units(0.19)"
     ],
     "literals": [
       [
-        "0.22"
+        "0.19"
       ]
     ]
   },
@@ -687,6 +803,30 @@
     ],
     "literals": [
       []
+    ]
+  },
+  {
+    "name": "EarnRate",
+    "kebab": "earn-rate",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": true,
+    "keys": [
+      "earn-rate"
+    ]
+  },
+  {
+    "name": "EarnRatePrev",
+    "kebab": "earn-rate-prev",
+    "params": null,
+    "results": [
+      "int"
+    ],
+    "used": true,
+    "keys": [
+      "earn-rate-prev"
     ]
   },
   {
@@ -755,11 +895,11 @@
     ],
     "used": true,
     "keys": [
-      "harvesters-in-danger(0.13)"
+      "harvesters-in-danger(0.05)"
     ],
     "literals": [
       [
-        "0.13"
+        "0.05"
       ]
     ]
   },
@@ -1204,6 +1344,18 @@
     ]
   },
   {
+    "name": "KnownCapturables",
+    "kebab": "known-capturables",
+    "params": null,
+    "results": [
+      "[]model.Enemy"
+    ],
+    "used": false,
+    "keys": [
+      "known-capturables"
+    ]
+  },
+  {
     "name": "LostRole",
     "kebab": "lost-role",
     "params": [
@@ -1337,6 +1489,35 @@
     ]
   },
   {
+    "name": "NearestRememberedStructure",
+    "kebab": "nearest-remembered-structure",
+    "params": [
+      {
+        "name": "",
+        "type": "int"
+      },
+      {
+        "name": "",
+        "type": "int"
+      }
+    ],
+    "results": [
+      "*model.Enemy"
+    ],
+    "domains": [
+      "",
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "nearest-remembered-structure"
+    ],
+    "literals": [
+      [],
+      []
+    ]
+  },
+  {
     "name": "OverextendedSquadMembers",
     "kebab": "overextended-squad-members",
     "params": [
@@ -1358,8 +1539,8 @@
     ],
     "used": true,
     "keys": [
-      "overextended-squad-members(ground-attack,0.45)",
-      "overextended-squad-members(naval-attack,0.45)"
+      "overextended-squad-members(ground-attack,0.47)",
+      "overextended-squad-members(naval-attack,0.47)"
     ],
     "literals": [
       [
@@ -1367,7 +1548,7 @@
         "naval-attack"
       ],
       [
-        "0.45"
+        "0.47"
       ]
     ]
   },
@@ -1709,6 +1890,37 @@
     ]
   },
   {
+    "name": "SquadClump",
+    "kebab": "squad-clump",
+    "params": [
+      {
+        "name": "",
+        "type": "string"
+      },
+      {
+        "name": "",
+        "type": "int"
+      }
+    ],
+    "results": [
+      "int",
+      "int",
+      "int"
+    ],
+    "domains": [
+      "",
+      ""
+    ],
+    "used": false,
+    "keys": [
+      "squad-clump"
+    ],
+    "literals": [
+      [],
+      []
+    ]
+  },
+  {
     "name": "SquadClumped",
     "kebab": "squad-clumped",
     "params": [
@@ -1750,14 +1962,13 @@
       "bool"
     ],
     "domains": [
-      ""
+      "squad"
     ],
     "used": true,
     "keys": [
       "squad-exists(air-attack)",
       "squad-exists(ground-attack)",
       "squad-exists(ground-defense)",
-      "squad-exists(harvester-guard)",
       "squad-exists(naval-attack)"
     ],
     "literals": [
@@ -1765,7 +1976,6 @@
         "air-attack",
         "ground-attack",
         "ground-defense",
-        "harvester-guard",
         "naval-attack"
       ]
     ]
@@ -1789,14 +1999,12 @@
     "keys": [
       "squad-idle-count(air-attack)",
       "squad-idle-count(ground-attack)",
-      "squad-idle-count(ground-defense)",
       "squad-idle-count(naval-attack)"
     ],
     "literals": [
       [
         "air-attack",
         "ground-attack",
-        "ground-defense",
         "naval-attack"
       ]
     ]
@@ -1814,14 +2022,13 @@
       "bool"
     ],
     "domains": [
-      ""
+      "squad"
     ],
     "used": true,
     "keys": [
       "squad-needs-reinforcement(air-attack)",
       "squad-needs-reinforcement(ground-attack)",
       "squad-needs-reinforcement(ground-defense)",
-      "squad-needs-reinforcement(harvester-guard)",
       "squad-needs-reinforcement(naval-attack)"
     ],
     "literals": [
@@ -1829,7 +2036,6 @@
         "air-attack",
         "ground-attack",
         "ground-defense",
-        "harvester-guard",
         "naval-attack"
       ]
     ]
@@ -1922,6 +2128,18 @@
     ]
   },
   {
+    "name": "StrikeBlockers",
+    "kebab": "strike-blockers",
+    "params": null,
+    "results": [
+      "map[string]int"
+    ],
+    "used": false,
+    "keys": [
+      "strike-blockers"
+    ]
+  },
+  {
     "name": "SupportPowerReady",
     "kebab": "support-power-ready",
     "params": [
@@ -1938,6 +2156,7 @@
     ],
     "used": true,
     "keys": [
+      "support-power-ready(GpsPowerInfoOrder)",
       "support-power-ready(GrantExternalConditionPowerInfoOrder)",
       "support-power-ready(NukePowerInfoOrder)",
       "support-power-ready(SovietParatroopers)",
@@ -1946,6 +2165,7 @@
     ],
     "literals": [
       [
+        "GpsPowerInfoOrder",
         "GrantExternalConditionPowerInfoOrder",
         "NukePowerInfoOrder",
         "SovietParatroopers",
@@ -1993,6 +2213,18 @@
     "used": false,
     "keys": [
       "threat-field"
+    ]
+  },
+  {
+    "name": "TransitSpread",
+    "kebab": "transit-spread",
+    "params": null,
+    "results": [
+      "*rules.transitSpread"
+    ],
+    "used": false,
+    "keys": [
+      "transit-spread"
     ]
   },
   {

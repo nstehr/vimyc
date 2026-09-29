@@ -303,6 +303,8 @@ impl<'a> Evaluator<'a> {
             Predicate::OverextendedSquadMembers => {
                 Value::Int(st.collection(&key("overextended-squad-members", args, self.params)))
             }
+            Predicate::EarnRate => Value::Int(st.scalar("earn-rate") as i64),
+            Predicate::EarnRatePrev => Value::Int(st.scalar("earn-rate-prev") as i64),
             Predicate::IncomeRate => Value::Int(st.scalar("income-rate") as i64),
             Predicate::PowerExcess => Value::Int(st.scalar("power-excess") as i64),
             Predicate::QueueBusy => {

@@ -56,6 +56,8 @@ pub enum Predicate {
     IdleMinelayers,
     IdleNavalUnits,
     IdleScouts,
+    EarnRate,
+    EarnRatePrev,
     IncomeRate,
     IsRushed,
     LostRole,
@@ -441,6 +443,18 @@ pub const PREDICATES: &[Signature] = &[
         name: "idle-scouts",
         params: &[],
         ret: Type::Collection,
+    },
+    Signature {
+        id: Predicate::EarnRate,
+        name: "earn-rate",
+        params: &[],
+        ret: Type::Int,
+    },
+    Signature {
+        id: Predicate::EarnRatePrev,
+        name: "earn-rate-prev",
+        params: &[],
+        ret: Type::Int,
     },
     Signature {
         id: Predicate::IncomeRate,
