@@ -37,6 +37,10 @@ struct GoRule {
 /// Explicit rather than "ignore anything unmatched": the whole value of the
 /// frozen corpus is that an unexpected rule is still an error.
 const POST_PORT: &[&str] = &[
+    // The only non-superweapon support power an Allied faction has, and Go's
+    // corpus never fired it: every power it does fire lives on AFLD, the Soviet
+    // airfield. GPS lives on ATEK, which Vimy already builds.
+    "fire-gps",
     "recall-stray-units",
     "scramble-to-harvesters",
 ];
@@ -407,6 +411,23 @@ const RETUNED: &[(&str, Field, &str)] = &[
         "above the tech centre when economy and tech are weighted equally",
     ),
     (
+        "capture-building",
+        Field::Condition,
+        "the transport clause asks whether a ride EXISTS, not whether one could \
+         be built. Go has `not can-build-transport()`, which is a capability and \
+         true all game, so the walk-on-foot path was closed permanently and an \
+         engineer could only capture something it was already standing next to. \
+         Measured over nine streamed games: of 4388 engineer-ticks with an idle \
+         engineer and a known capturable, the capability form opened in 439 and \
+         transport-count opens in 4072. The ride was never coming - a transport \
+         was alive in 2178 of those ticks and IDLE in 17, because designateScout \
+         claims the only Allied transport, and produce-apc targets the \
+         Soviet-only apc role so it has never fired. Game 179 walked four \
+         engineers with no ride at all and captured both derricks it reached, \
+         the only two captures in ten sessions until this changed; the first \
+         game after it captured three of four, the earliest in the archive",
+    ),
+    (
         "build-base-defense-rush",
         Field::Condition,
         "the defense cap's top is raised, for the reason in build-base-defense",
@@ -417,7 +438,17 @@ const RETUNED: &[(&str, Field, &str)] = &[
         "affordable() now holds a reserve for whichever tech gate is still \
          missing, released the moment net cash turns positive. Go's version \
          reserved only for the radar. Defenses are the rules that outspent it: \
-         game 72 sampled thirty-three tesla coils against no radar at all",
+         game 72 sampled thirty-three tesla coils against no radar at all. \
+         Since game 178 the gate is defense-reserves() rather than \
+         affordable(): every one of affordable's savings clauses hangs off \
+         `income-rate > 0`, so once ore is flowing this rule needed nothing but \
+         its own cost - 600 at the 0.75 ground-defense-priority the strategist \
+         actually runs - while produce-vehicle needs 800 plus the vehicle \
+         plan's savings. Static defense therefore had first call on every \
+         credit. Game 178 built 28 defenses beside 63 army units, 29% of priced \
+         production against armour's 23%, the smallest army and lowest income \
+         of games 175-178, an even trade all game and zero enemy buildings \
+         destroyed. The added clause is infantry-reserves' first one",
     ),
     (
         "build-aa-defense",
@@ -662,7 +693,12 @@ const RETUNED: &[(&str, Field, &str)] = &[
          alive and re-arms when that one dies, so nothing was protecting \
          anything. This entry covers both, and the corpus gives no coverage of \
          either - the condition is skipped here, so the change rests on the \
-         rule reading correctly and on the next game",
+         rule reading correctly and on the next game. The reserve then became \
+         produce-vehicle's scaled-reserves(800) rather than a flat \
+         reserves(500): at the lower floor this rule bought whenever cash sat \
+         between the two, so it took the tank rule's money without ever \
+         preempting it. Game 177 sent 13 scout envelopes against 7 for tanks, \
+         18% of priced production against 12%",
     ),
     (
         "produce-siege-vehicle",

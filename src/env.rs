@@ -665,6 +665,9 @@ pub const AXES: &[Member] = &[
 /// OpenRA order names, not kebab — these are engine identifiers.
 pub const SUPPORT_POWERS: &[Member] = &[
     Member {
+        name: "GpsPowerInfoOrder",
+    },
+    Member {
         name: "GrantExternalConditionPowerInfoOrder",
     },
     Member {
@@ -908,6 +911,7 @@ pub const ACTIONS: &[&str] = &[
     "deliver-assault-apc",
     "deploy-mcv",
     "emergency-defend-base",
+    "fire-gps",
     "fire-iron-curtain",
     "fire-nuke",
     "fire-parabombs",
