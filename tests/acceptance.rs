@@ -731,15 +731,28 @@ const RETUNED: &[(&str, Field, &str)] = &[
          482 safe. Artillery is fragile, so each loss drops the count below \
          the absolute cap and hands siege first call on the next credits: \
          game 128 ran that treadmill to 14 artillery in 33090 ticks while \
-         the tank rate fell by three quarters. So siege now needs a screen \
-         of lerp(2,4,vehicle-weight) TANKS, and must stay under a third of \
-         them, which holds artillery near a quarter of the vehicle force at \
-         every size. Tanks, not combat vehicles: CombatVehicleCount includes \
-         artillery and a gate written on it would satisfy itself. Both \
-         numbers come from what Vimy fields — peak 13 vehicles in game 127 \
-         and 4 in game 128 — not from what a tank line ought to look like; a \
-         screen of seven was tried first and would have returned the rule to \
-         never firing",
+         the tank rate fell by three quarters. So siege needed a screen of \
+         TANKS and had to stay under a third of them. THE RATIO IS NOW GONE, \
+         2026-10-02, replaced by `share 3` on the rule -- one production slot \
+         in three. The ratio was a SCHEDULING constraint written as a \
+         composition one, and keying it to live tank count failed at both \
+         settings: at 3:1 the first artillery needs three tanks against a \
+         mean of 0.89-1.77 alive, so it was satisfiable in 1 to 32 percent of \
+         states and artillery peaked at exactly TWO in every game from 210 to \
+         215 while the enemy fielded 4 to 12 v2 launchers; at 1:1 game 187 \
+         ran the treadmill again at 4.10 credits lost per credit killed. The \
+         escort FLOOR stays, because a floor is about whether a piece \
+         survives and a ration is about who gets the queue. Three matches the \
+         old intent of one siege piece per three vehicles, now counted in \
+         slots rather than bodies -- and it may overshoot in live terms, \
+         since game 185 measured artillery living 7420 ticks at the median \
+         against 2100 for units born with one escort or none. If it does, \
+         raise the number. WARNING FOR THE NEXT EDITOR: this rule already \
+         held a Condition exemption when the ratio was removed, so the corpus \
+         reported ZERO disagreements for that change. An exemption is \
+         per-field and permanent, not per-change; once a rule is listed here \
+         its condition is unchecked forever, which is why this text has to \
+         carry the state rather than just the reason",
     ),
     (
         "produce-specialist-infantry",
