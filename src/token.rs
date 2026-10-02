@@ -25,6 +25,7 @@ pub enum TokenKind {
     // keywords
     Rule,
     Priority,
+    Share,
     Category,
     Exclusive,
     Do,
@@ -107,6 +108,7 @@ impl TokenKind {
         Some(match s {
             "rule" => TokenKind::Rule,
             "priority" => TokenKind::Priority,
+            "share" => TokenKind::Share,
             "category" => TokenKind::Category,
             "exclusive" => TokenKind::Exclusive,
             "do" => TokenKind::Do,

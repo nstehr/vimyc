@@ -81,6 +81,8 @@ pub struct IrRule {
     pub priority: IrExpr,
     pub category: CategoryId,
     pub exclusive: bool,
+    /// One win in `share` of its exclusive category's wins. 0 is unrationed.
+    pub share: i64,
     /// Why the rule exists. Reaches the dashboard; see `docs/design.md`.
     pub because: Option<String>,
     pub action: IrAction,

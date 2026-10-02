@@ -65,6 +65,12 @@ pub struct Rule {
     pub category: Name,
     /// A modifier on `category`; absent means false.
     pub exclusive: bool,
+    /// Rations an exclusive category: the rule may win it at most once in
+    /// every `share` wins. Absent means unrationed, which is every rule that
+    /// does not say otherwise. A literal rather than an expression, unlike
+    /// `priority`: letting a doctrine set it would put the scheduler itself
+    /// under the strategist's control, which is a larger decision than this.
+    pub share: Option<i64>,
     /// The action to run. Exactly one per rule.
     pub action: Action,
     /// Why the rule exists. The language has no comments; unlike one, this

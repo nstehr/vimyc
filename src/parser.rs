@@ -191,6 +191,7 @@ impl<'a> Parser<'a> {
         let mut priority: Option<Expr> = None;
         let mut category: Option<Name> = None;
         let mut exclusive = false;
+        let mut share: Option<i64> = None;
         let mut action: Option<Action> = None;
         let mut because: Option<String> = None;
         let mut lets: Vec<Let> = Vec::new();
@@ -210,6 +211,27 @@ impl<'a> Parser<'a> {
                         self.error(kw, "duplicate `priority`".into());
                     }
                     priority = Some(e);
+                }
+                TokenKind::Share => {
+                    let kw = self.peek_span();
+                    self.bump(); // `share`
+                    // A literal, not an expression: `priority` is an expression
+                    // so a doctrine can tune it, but the scheduler's own ration
+                    // is a property of the rule set rather than of the plan.
+                    match self.share_count() {
+                        Some(n) if n >= 2 => {
+                            if share.is_some() {
+                                self.error(kw, "duplicate `share`".into());
+                            }
+                            share = Some(n);
+                        }
+                        Some(n) => self.error(
+                            kw,
+                            format!("`share {n}` rations nothing: 2 is the smallest ration, \
+                                     and omitting `share` is how a rule says it wants every turn"),
+                        ),
+                        None => {}
+                    }
                 }
                 TokenKind::Category => {
                     let kw = self.peek_span();
@@ -297,6 +319,7 @@ impl<'a> Parser<'a> {
         };
 
         Some(Rule {
+            share,
             name,
             priority,
             category,
@@ -583,6 +606,19 @@ impl<'a> Parser<'a> {
 
     /// Returns an owned `String` rather than an interned symbol: `because` text
     /// is prose that gets stored and printed, never compared or looked up.
+    /// `share` takes a plain count. Kept separate from `primary` so the error
+    /// can say what the field means rather than "expected an expression".
+    fn share_count(&mut self) -> Option<i64> {
+        let span = self.peek_span();
+        if let TokenKind::Number(n) = *self.peek() {
+            self.bump();
+            Some(n)
+        } else {
+            self.error(span, "expected a whole number after `share`".into());
+            None
+        }
+    }
+
     fn string_literal(&mut self) -> Option<String> {
         let span = self.peek_span();
         if let TokenKind::Str(text) = self.peek() {

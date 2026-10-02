@@ -801,3 +801,70 @@ fn the_arithmetic_builtins_match_go() {
              require cash >= trunc(min(a, b) * 1000.0)\n}\n";
     assert_eq!(emit(m, &[("a", 0.6), ("b", 0.3)]), "Cash() >= 300");
 }
+
+// ---- share ----------------------------------------------------------------
+
+/// Compile one rule from source to the emitted artifact.
+fn emit_share_rule(src: &str) -> Vec<vimyc::emit::RuleSource> {
+    let (tokens, lex_diags) = vimyc::lexer::lex(src);
+    assert!(lex_diags.is_empty(), "lex: {lex_diags:?}");
+    let (ast, parse_diags) = vimyc::parser::parse(&tokens);
+    assert!(parse_diags.is_empty(), "parse: {parse_diags:?}");
+    let ir = lower_checked(&ast);
+    let vimyc::emit::Artifact::Expr(rules) =
+        vimyc::emit::emit(&ir, &NO_PARAMS, vimyc::emit::Target::Expr)
+    else {
+        unreachable!()
+    };
+    rules
+}
+
+/// `share N` parses, lowers, and reaches the artifact as a `share` field.
+///
+/// The field rations an exclusive category: the rule may win it at most once in
+/// every N wins. It exists because exclusive categories are a STRICT-priority
+/// scheduler, so the loser does not build later, it does not build at all --
+/// vimy-l6l counted produce-scout-vehicle preempted 216 times in game 127 and
+/// never run, flak-truck 216, mad-tank 95.
+#[test]
+fn share_reaches_the_artifact() {
+    let src = "rule a {\n  priority 100\n  category produce-vehicle exclusive\n  share 3\n  \
+               do produce-vehicle\n  require cash >= 1\n}\n";
+    let rules = emit_share_rule(src);
+    assert_eq!(rules[0].share, 3, "share did not reach the artifact");
+    let json = serde_json::to_string(&rules).expect("serialises");
+    assert!(
+        json.contains("\"share\":3"),
+        "share did not reach the JSON contract: {json}"
+    );
+}
+
+/// A rule without `share` emits NO share field at all.
+///
+/// This is the property that let the field ship without moving a digest: the
+/// artifact for every existing rule has to be byte-identical, or adding a
+/// scheduler primitive nobody uses would invalidate every cohort comparison in
+/// the archive.
+#[test]
+fn absent_share_emits_nothing() {
+    let src = "rule a {\n  priority 100\n  category produce-vehicle exclusive\n  \
+               do produce-vehicle\n  require cash >= 1\n}\n";
+    let rules = emit_share_rule(src);
+    let json = serde_json::to_string(&rules).expect("serialises");
+    assert!(
+        !json.contains("share"),
+        "an unrationed rule must emit no share field: {json}"
+    );
+}
+
+/// `share 1` is rejected at parse time rather than silently meaning "every
+/// turn", because a reader would take it as "one share" and get the opposite of
+/// a ration.
+#[test]
+fn share_below_two_is_rejected() {
+    let src = "rule a {\n  priority 100\n  category produce-vehicle exclusive\n  share 1\n  \
+               do produce-vehicle\n  require cash >= 1\n}\n";
+    let (tokens, _) = vimyc::lexer::lex(src);
+    let (_, diags) = vimyc::parser::parse(&tokens);
+    assert!(!diags.is_empty(), "`share 1` should be a parse error");
+}

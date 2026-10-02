@@ -38,6 +38,11 @@ fn rule(r: &IrRule, params: &ParamValues) -> String {
         env::category_name(r.category.0),
         if r.exclusive { " exclusive" } else { "" }
     ));
+    // Omitted when unrationed, so a rule that does not use it round-trips to
+    // exactly the text it came from.
+    if r.share > 0 {
+        out.push_str(&format!("  share {}\n", r.share));
+    }
     if let Some(why) = &r.because {
         // The one field written to be read, so it goes where a reader looks
         // first — above the mechanics, as in the hand-written sources.

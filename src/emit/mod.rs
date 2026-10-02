@@ -33,6 +33,11 @@ pub struct RuleSource {
     pub priority: i64,
     pub category: String,
     pub exclusive: bool,
+    /// One win in `share` of its exclusive category's wins. Skipped when
+    /// unrationed so the artifact is byte-identical for every rule that does
+    /// not use it -- which is what lets the field ship without moving a digest.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub share: i64,
     /// Why the rule exists. Absent unless the source said.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub because: Option<String>,
@@ -42,6 +47,10 @@ pub struct RuleSource {
     /// The same rule as `.vy`, for the dashboard and the archive. Emitted from
     /// the same `Ir` in the same pass as `condition`, so the two cannot drift.
     pub source: String,
+}
+
+fn is_zero(n: &i64) -> bool {
+    *n == 0
 }
 
 /// An unparameterised rule set takes an empty `params`.
