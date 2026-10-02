@@ -78,44 +78,25 @@ enum Field {
 const RETUNED: &[(&str, Field, &str)] = &[
     (
         "build-power",
-        Field::Priority,
-        "785, BELOW build-advanced-power at 790. Both are in the exclusive \
-         `economy` category and an exclusive category picks the highest-priority \
-         rule whose condition HOLDS, so when build-power moved to the same \
-         `power-excess < 50` threshold advanced-power had always used, it took \
-         every evaluation advanced-power used to win. Game 214 measured the cost: \
-         build-advanced-power went from 5-6 acts in games 210-213 to ZERO, the \
-         base ran 14 basic plants against a baseline of 2-6, and median power \
-         excess FELL to 98 against 171 and 180 -- the baseline games drew on a mix \
-         including 200-power advanced plants, so roughly 2400 credits of extra \
-         basic plants bought worse power. Same shape as the produce-heavy-vehicle \
-         entry above. Below 790 the advanced plant takes the headroom band \
-         whenever its own gates pass, and this rule fills in when they do not",
-    ),
-    (
-        "build-power",
         Field::Condition,
-        "fires on HEADROOM (`power-excess < 50`) instead of on a deficit already \
-         arrived, and carries the produce-then-place guard the other seventeen \
-         building rules got and this one did not. RA sets LowPowerModifier 300, so \
-         the instant excess goes negative everything builds three times slower -- \
-         including the plant that would fix it, which then occupies the Building \
-         queue and shuts this rule's own `not queue-busy` gate. Game 212 spent \
-         35920 ticks negative across 26 episodes, and 1128 evaluations of those had \
-         a plant buildable, cash in hand, nothing queued and the queue busy. The \
-         warning window is measured, not assumed: in the 2000 ticks before an \
-         episode game 211 ran median excess 80, then 65, then 38 over the last 300 \
-         with 71 percent of samples under 50, and game 212 ran 96, then 50, then 70 \
-         with about half under 50. So 50 fires several hundred ticks early, while \
-         the queue is still free, and bounds its own spending -- once excess clears \
-         50 the rule stops. build-advanced-power has used the same threshold all \
-         along. The guard matters MORE at the looser threshold: power plants are \
-         produce-then-place like everything else, role-count lags an unplaced one, \
-         and without it a headroom trigger orders a second and a third before the \
-         first lands, which is game 99's three helipads under a cap of two. \
-         Deliberately NOT the other candidate fix of dropping `not queue-busy`: \
-         the Building queue is serial, so a plant ordered behind a half-built \
-         refinery arrives no sooner and the deficit runs just as long",
+        "carries the produce-then-place guard the other seventeen building rules \
+         got and this one did not: it will not order a second plant while one is \
+         already in the queue. Construction is produce-then-place, so a limit that \
+         reads a ROLE COUNT is satisfied the whole time an unplaced one waits, \
+         which is game 99's three helipads under a cap of two. The threshold \
+         itself is back to Go's `power-excess < 0` -- a headroom version was tried \
+         on 2026-10-02 and REVERTED after games 214 and 215. It fired as intended \
+         (first act at tick 3030 against a 5630-12910 baseline) and was harmful \
+         anyway: build-power asks about 260 credits where build-advanced-power \
+         asks 500, so the cheap plant cleared the deficit before cash ever reached \
+         500 with excess still under 50, and advanced plants went from 10674 \
+         unit-samples in game 211 to ZERO in 214 and 215 while basic plants rose \
+         from 2-6 to 14 and 8 and median excess FELL from 171/180 to 98/70. Two \
+         diagnoses were shipped and refuted on the way: exclusive-category \
+         preemption (advanced-power was evaluated 3396 times in game 215 and \
+         skipped 0.7 percent, same as baseline) and a priority reorder to 785 to \
+         cure it (changed nothing, same reason). A redesign has to handle the cash \
+         floors, not the priority",
     ),
     (
         "squad-reengage",
