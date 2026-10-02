@@ -78,6 +78,22 @@ enum Field {
 const RETUNED: &[(&str, Field, &str)] = &[
     (
         "build-power",
+        Field::Priority,
+        "785, BELOW build-advanced-power at 790. Both are in the exclusive \
+         `economy` category and an exclusive category picks the highest-priority \
+         rule whose condition HOLDS, so when build-power moved to the same \
+         `power-excess < 50` threshold advanced-power had always used, it took \
+         every evaluation advanced-power used to win. Game 214 measured the cost: \
+         build-advanced-power went from 5-6 acts in games 210-213 to ZERO, the \
+         base ran 14 basic plants against a baseline of 2-6, and median power \
+         excess FELL to 98 against 171 and 180 -- the baseline games drew on a mix \
+         including 200-power advanced plants, so roughly 2400 credits of extra \
+         basic plants bought worse power. Same shape as the produce-heavy-vehicle \
+         entry above. Below 790 the advanced plant takes the headroom band \
+         whenever its own gates pass, and this rule fills in when they do not",
+    ),
+    (
+        "build-power",
         Field::Condition,
         "fires on HEADROOM (`power-excess < 50`) instead of on a deficit already \
          arrived, and carries the produce-then-place guard the other seventeen \
