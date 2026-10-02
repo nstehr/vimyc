@@ -77,6 +77,31 @@ enum Field {
 /// drifted somewhere else.
 const RETUNED: &[(&str, Field, &str)] = &[
     (
+        "build-power",
+        Field::Condition,
+        "fires on HEADROOM (`power-excess < 50`) instead of on a deficit already \
+         arrived, and carries the produce-then-place guard the other seventeen \
+         building rules got and this one did not. RA sets LowPowerModifier 300, so \
+         the instant excess goes negative everything builds three times slower -- \
+         including the plant that would fix it, which then occupies the Building \
+         queue and shuts this rule's own `not queue-busy` gate. Game 212 spent \
+         35920 ticks negative across 26 episodes, and 1128 evaluations of those had \
+         a plant buildable, cash in hand, nothing queued and the queue busy. The \
+         warning window is measured, not assumed: in the 2000 ticks before an \
+         episode game 211 ran median excess 80, then 65, then 38 over the last 300 \
+         with 71 percent of samples under 50, and game 212 ran 96, then 50, then 70 \
+         with about half under 50. So 50 fires several hundred ticks early, while \
+         the queue is still free, and bounds its own spending -- once excess clears \
+         50 the rule stops. build-advanced-power has used the same threshold all \
+         along. The guard matters MORE at the looser threshold: power plants are \
+         produce-then-place like everything else, role-count lags an unplaced one, \
+         and without it a headroom trigger orders a second and a third before the \
+         first lands, which is game 99's three helipads under a cap of two. \
+         Deliberately NOT the other candidate fix of dropping `not queue-busy`: \
+         the Building queue is serial, so a plant ordered behind a half-built \
+         refinery arrives no sooner and the deficit runs just as long",
+    ),
+    (
         "squad-reengage",
         Field::Action,
         "squad-nudge-stragglers rather than squad-attack-move. The rule exists to \
