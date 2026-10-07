@@ -704,6 +704,35 @@ const RETUNED: &[(&str, Field, &str)] = &[
     ),
     (
         "produce-scout-vehicle",
+        Field::Priority,
+        "483 with `share 4`, up from 465. At 465 this rule fired ZERO times in \
+         every game from 205 to 222: it sat below produce-vehicle at 480 while \
+         carrying the SAME scaled-reserves(800) floor on purpose, so whenever a \
+         scout was affordable a tank was too and the tank took the exclusive \
+         slot. produce-vehicle's own cap never relieves it either -- \
+         combat-vehicle-count runs 0.89-1.77 against army-cap(3,18,vw) of about \
+         3 to 11. A rule that can only win when the rule above it fails never \
+         wins. WHY IT IS WORTH PREEMPTING FOR: has-scout is the only quantity in \
+         the archive separating wins from losses outside the noise -- 0.901 \
+         against 0.252, clustered by game, five times the threshold, zero \
+         overlap -- and it is a maintenance failure. Every game starts at \
+         0.33-0.65 scout presence; the two wins climb to 1.000 and hold, all \
+         fifteen measured losses decay to EXACTLY 0.000 and never recover. 83 \
+         percent of 6826 blocked strikes over games 217-222 were \
+         no-target-en-route or not-building, both meaning no structure is known \
+         within reach, and the wins destroyed 31 and 16 buildings against 1-12 \
+         in every loss. designateScout's other paths are shut for Allied: dogs \
+         are Soviet-only and the two wins built 15 and 6, and the light-tank \
+         path needs more vehicles than Vimy fields. 483 sits above \
+         produce-vehicle and below siege's promoted 485, so it takes the slots \
+         siege yields under its own ration rather than competing with the \
+         doctrine's core. share 4 is the brake game 177 needed, where a \
+         preempting scout rule sent 13 envelopes against 7 for tanks and the \
+         army was wiped by tick 18000; `not has-scout()` already caps it at one \
+         alive, so the ration only bounds the rebuild rate",
+    ),
+    (
+        "produce-scout-vehicle",
         Field::Condition,
         "reserve is a multiple of the unit's price, not a flat sum added to it. \
          And `not has-enemy-intel()` is gone: it meant build a scout only while \
